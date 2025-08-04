@@ -2,9 +2,9 @@ namespace IoBoardWrapper
 {
     public interface IIoBoardController
     {
-        bool Register(string boardName);
-        void Unregister();
-        void SetOutput(int port, int value);
-        int GetInput(int port);
+        bool Open(int rotarySwitchNo);
+        void Close(int rotarySwitchNo);
+        void WriteOutput(int rotarySwitchNo, int port, bool value);
+        bool ReadInput(int rotarySwitchNo, int port);
     }
 }
