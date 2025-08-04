@@ -9,37 +9,44 @@ namespace APP_B
     {
         private IIoBoardController _controller;
         private IoboardConfig _config;
+        private int _rotarySwitchNo = 0;
 
         public MainForm()
         {
             InitializeComponent();
 
-            // 初期化
+            // 設定読み込みとスイッチ番号取得
             _config = IoboardConfig.Load(ConfigLocator.GetConfigPath());
+
+            if (int.TryParse(_config.BoardName.Replace("FBIDIO", ""), out int rswNo))
+            {
+                _rotarySwitchNo = rswNo;
+            }
+
             _controller = new IoboardWrapper();
 
-            bool success = _controller.Register(_config.BoardName);
-            AppendLog(success ? "登録成功" : "登録失敗");
+            bool success = _controller.Open(_rotarySwitchNo);
+            AppendLog(success ? "Open 成功" : "Open 失敗");
         }
 
         private void MainForm_FormClosed(object sender, FormClosedEventArgs e)
         {
-            _controller.Unregister();
+            _controller.Close(_rotarySwitchNo);
         }
 
         private void buttonSetOutput_Click(object sender, EventArgs e)
         {
             int port = (int)numericPort.Value;
-            int value = checkOutput.Checked ? 1 : 0;
-            _controller.SetOutput(port, value);
-            AppendLog($"SetOutput({port}, {value}) 実行");
+            bool value = checkOutput.Checked;
+            _controller.WriteOutput(_rotarySwitchNo, port, value);
+            AppendLog($"WriteOutput({port}, {value}) 実行");
         }
 
         private void buttonGetInput_Click(object sender, EventArgs e)
         {
             int port = (int)numericPort.Value;
-            int result = _controller.GetInput(port);
-            AppendLog($"GetInput({port}) = {result}");
+            bool result = _controller.ReadInput(_rotarySwitchNo, port);
+            AppendLog($"ReadInput({port}) = {result}");
         }
 
         private void AppendLog(string message)
