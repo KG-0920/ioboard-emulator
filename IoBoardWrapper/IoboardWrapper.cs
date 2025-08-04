@@ -17,20 +17,23 @@ namespace IoBoardWrapper
         [DllImport("IoboardEmulator.dll", CallingConvention = CallingConvention.StdCall)]
         private static extern int GetInput(int port);
 
-        public bool Register(string boardName)
+        private string _boardName = "FBIDIO0";
+
+        public bool Open(int rotarySwitchNo)
         {
+            _boardName = $"FBIDIO{rotarySwitchNo}";
             try
             {
-                return RegisterDioHandle(boardName) == 0;
+                return RegisterDioHandle(_boardName) == 0;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Register error: {ex.Message}");
+                Console.WriteLine($"Open error: {ex.Message}");
                 return false;
             }
         }
 
-        public void Unregister()
+        public void Close(int rotarySwitchNo)
         {
             try
             {
@@ -38,32 +41,32 @@ namespace IoBoardWrapper
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unregister error: {ex.Message}");
+                Console.WriteLine($"Close error: {ex.Message}");
             }
         }
 
-        public void SetOutput(int port, int value)
+        public void WriteOutput(int rotarySwitchNo, int port, bool value)
         {
             try
             {
-                SetOutput(port, value);
+                SetOutput(port, value ? 1 : 0);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"SetOutput error: {ex.Message}");
+                Console.WriteLine($"WriteOutput error: {ex.Message}");
             }
         }
 
-        public int GetInput(int port)
+        public bool ReadInput(int rotarySwitchNo, int port)
         {
             try
             {
-                return GetInput(port);
+                return GetInput(port) != 0;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"GetInput error: {ex.Message}");
-                return -1;
+                Console.WriteLine($"ReadInput error: {ex.Message}");
+                return false;
             }
         }
     }
