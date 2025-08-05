@@ -1,76 +1,88 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
+using System.Collections.Generic;
+using IoboardServer.Config;
+using IoboardServer.Logging;
 
 namespace IoboardServer
 {
     public partial class MainForm : Form
     {
-        private readonly Dictionary<int, CheckBox> _inputCheckboxes = new();
-        private readonly Dictionary<int, CheckBox> _outputCheckboxes = new();
+        private readonly int _rswNo;
+        private readonly string _deviceName;
 
-        public MainForm(int rotarySwitchNo)
+        public MainForm(int rswNo, string deviceName)
         {
+            _rswNo = rswNo;
+            _deviceName = deviceName;
+
             InitializeComponent();
-            this.Text = $"IOボード [RSW: {rotarySwitchNo}]";
+            InitializeDynamicLayout();
         }
 
-        private void InitializeComponent()
+        private void InitializeDynamicLayout()
         {
-            this.SuspendLayout();
-            this.Name = "MainForm";
-            this.Text = "IOボード";
-            this.ClientSize = new Size(400, 200);
-
-            Label labelIn = new() { Text = "Input", Location = new Point(30, 20), AutoSize = true };
-            Label labelOut = new() { Text = "Output", Location = new Point(30, 90), AutoSize = true };
-            this.Controls.Add(labelIn);
-            this.Controls.Add(labelOut);
-
-            for (int i = 0; i < 8; i++)
+            var config = ConfigLocator.Load();
+            var board = config.Boards.FirstOrDefault(b => b.RotarySwitchNo == _rswNo);
+            if (board == null)
             {
-                var inChk = new CheckBox { Text = $"IN {i}", Location = new Point(100 + i * 35, 20), AutoSize = true };
-                var outChk = new CheckBox { Text = $"OUT {i}", Location = new Point(100 + i * 35, 90), AutoSize = true };
-                outChk.CheckedChanged += (s, e) => OutputChanged?.Invoke(i, outChk.Checked);
-                this.Controls.Add(inChk);
-                this.Controls.Add(outChk);
-                _inputCheckboxes[i] = inChk;
-                _outputCheckboxes[i] = outChk;
+                LogUtils.Write(LogType.Error, $"対象のボード（RSW: {_rswNo}）が見つかりません。");
+                return;
             }
 
-            this.FormClosing += (s, e) =>
+            var inputPorts = board.InputPorts ?? new List<IoboardPort>();
+            var outputPorts = board.OutputPorts ?? new List<IoboardPort>();
+
+            int inputCount = RoundUpToMultipleOf8(inputPorts.Count);
+            int outputCount = RoundUpToMultipleOf8(outputPorts.Count);
+
+            this.Text = $"I/O Viewer - RSW {_rswNo}";
+
+            var table = new TableLayoutPanel
             {
-                // 閉じられると困るので非表示にする
-                e.Cancel = true;
-                this.Hide();
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = Math.Max(inputCount, outputCount),
+                AutoSize = true
             };
 
-            this.ResumeLayout(false);
-        }
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
-        public void SetInput(int port, bool value)
-        {
-            if (_inputCheckboxes.TryGetValue(port, out var chk))
+            for (int i = 0; i < table.RowCount; i++)
             {
-                if (chk.InvokeRequired)
-                    chk.Invoke(() => chk.Checked = value);
-                else
-                    chk.Checked = value;
+                table.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
+
+                // 入力ポート
+                string inputLabel = (i < inputPorts.Count) ? inputPorts[i].Name : $"IN{i}";
+                var input = new CheckBox
+                {
+                    Text = inputLabel,
+                    Enabled = false,
+                    Anchor = AnchorStyles.Left,
+                    AutoSize = true
+                };
+                table.Controls.Add(input, 0, i);
+
+                // 出力ポート
+                string outputLabel = (i < outputPorts.Count) ? outputPorts[i].Name : $"OUT{i}";
+                var output = new CheckBox
+                {
+                    Text = outputLabel,
+                    Anchor = AnchorStyles.Left,
+                    AutoSize = true
+                };
+                table.Controls.Add(output, 1, i);
             }
+
+            this.Controls.Add(table);
         }
 
-        public void SetOutput(int port, bool value)
+        private int RoundUpToMultipleOf8(int count)
         {
-            if (_outputCheckboxes.TryGetValue(port, out var chk))
-            {
-                if (chk.InvokeRequired)
-                    chk.Invoke(() => chk.Checked = value);
-                else
-                    chk.Checked = value;
-            }
+            return ((count + 7) / 8) * 8;
         }
-
-        public event Action<int, bool>? OutputChanged;
     }
 }
