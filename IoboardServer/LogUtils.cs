@@ -6,13 +6,6 @@ using System.Text;
 
 namespace IoboardServer
 {
-    public enum LogType
-    {
-        Info,
-        Warning,
-        Error,
-    }
-
     public static class LogUtils
     {
         private static readonly object _lock = new();
