@@ -7,18 +7,23 @@ namespace SharedConfig
     {
         private const string ConfigFileName = "IoboardConfig.xml";
 
-        public static string GetConfigPath()
+        public static string GetConfigFilePath()
         {
-            // 実行ファイルのベースディレクトリ
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string? dir = AppDomain.CurrentDomain.BaseDirectory;
 
-            // 親ディレクトリ（APP/）
-            string parentDir = Directory.GetParent(baseDir)?.FullName ?? baseDir;
+            while (!string.IsNullOrEmpty(dir))
+            {
+                string configPath = Path.Combine(dir, ConfigFileName);
+                if (File.Exists(configPath))
+                {
+                    return configPath;
+                }
 
-            // APP/IoboardConfig.xml を返す
-            string configPath = Path.Combine(parentDir, ConfigFileName);
+                dir = Directory.GetParent(dir)?.FullName;
+            }
 
-            return configPath;
+            // 最終的に見つからなければ例外をスロー
+            throw new FileNotFoundException($"{ConfigFileName} が見つかりません。");
         }
     }
 }
