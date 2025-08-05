@@ -1,82 +1,76 @@
+using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace IoboardServer;
-
-public partial class MainForm : Form
+namespace IoboardServer
 {
-    private readonly int _boardId;
-    private readonly Label[] _inputLabels = new Label[32];
-    private readonly Label[] _outputLabels = new Label[32];
-
-    public MainForm(int boardId)
+    public partial class MainForm : Form
     {
-        _boardId = boardId;
-        InitializeComponent();
-        Text = $"I/O Board RSW {_boardId}";
-        Size = new Size(600, 300);
-        InitControls();
-    }
+        private readonly Dictionary<int, CheckBox> _inputCheckboxes = new();
+        private readonly Dictionary<int, CheckBox> _outputCheckboxes = new();
 
-    private void InitControls()
-    {
-        var inputPanel = new FlowLayoutPanel
+        public MainForm(int rotarySwitchNo)
         {
-            Location = new Point(10, 10),
-            Size = new Size(270, 240),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        var outputPanel = new FlowLayoutPanel
-        {
-            Location = new Point(300, 10),
-            Size = new Size(270, 240),
-            BorderStyle = BorderStyle.FixedSingle
-        };
+            InitializeComponent();
+            this.Text = $"IOボード [RSW: {rotarySwitchNo}]";
+        }
 
-        Label CreateLabel(string title)
+        private void InitializeComponent()
         {
-            return new Label
+            this.SuspendLayout();
+            this.Name = "MainForm";
+            this.Text = "IOボード";
+            this.ClientSize = new Size(400, 200);
+
+            Label labelIn = new() { Text = "Input", Location = new Point(30, 20), AutoSize = true };
+            Label labelOut = new() { Text = "Output", Location = new Point(30, 90), AutoSize = true };
+            this.Controls.Add(labelIn);
+            this.Controls.Add(labelOut);
+
+            for (int i = 0; i < 8; i++)
             {
-                Text = title,
-                AutoSize = false,
-                Width = 60,
-                Height = 20,
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.LightGray,
-                Margin = new Padding(3)
+                var inChk = new CheckBox { Text = $"IN {i}", Location = new Point(100 + i * 35, 20), AutoSize = true };
+                var outChk = new CheckBox { Text = $"OUT {i}", Location = new Point(100 + i * 35, 90), AutoSize = true };
+                outChk.CheckedChanged += (s, e) => OutputChanged?.Invoke(i, outChk.Checked);
+                this.Controls.Add(inChk);
+                this.Controls.Add(outChk);
+                _inputCheckboxes[i] = inChk;
+                _outputCheckboxes[i] = outChk;
+            }
+
+            this.FormClosing += (s, e) =>
+            {
+                // 閉じられると困るので非表示にする
+                e.Cancel = true;
+                this.Hide();
             };
+
+            this.ResumeLayout(false);
         }
 
-        for (int i = 0; i < 32; i++)
+        public void SetInput(int port, bool value)
         {
-            _inputLabels[i] = CreateLabel($"IN{i:D2}");
-            inputPanel.Controls.Add(_inputLabels[i]);
-
-            _outputLabels[i] = CreateLabel($"OUT{i:D2}");
-            outputPanel.Controls.Add(_outputLabels[i]);
+            if (_inputCheckboxes.TryGetValue(port, out var chk))
+            {
+                if (chk.InvokeRequired)
+                    chk.Invoke(() => chk.Checked = value);
+                else
+                    chk.Checked = value;
+            }
         }
 
-        Controls.Add(inputPanel);
-        Controls.Add(outputPanel);
-    }
-
-    public void UpdateInput(int port, bool value)
-    {
-        if (InvokeRequired)
+        public void SetOutput(int port, bool value)
         {
-            Invoke(() => UpdateInput(port, value));
-            return;
+            if (_outputCheckboxes.TryGetValue(port, out var chk))
+            {
+                if (chk.InvokeRequired)
+                    chk.Invoke(() => chk.Checked = value);
+                else
+                    chk.Checked = value;
+            }
         }
-        _inputLabels[port].BackColor = value ? Color.Lime : Color.LightGray;
-    }
 
-    public void UpdateOutput(int port, bool value)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(() => UpdateOutput(port, value));
-            return;
-        }
-        _outputLabels[port].BackColor = value ? Color.OrangeRed : Color.LightGray;
+        public event Action<int, bool>? OutputChanged;
     }
 }
