@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<IoLogConfig>
+  <EnableDebugLog>true</EnableDebugLog>
+  <EnableCommunicationLog>true</EnableCommunicationLog>
+  <MaxLogSizeKB>512</MaxLogSizeKB>
+  <MaxRotationFiles>5</MaxRotationFiles>
+</IoLogConfig>
