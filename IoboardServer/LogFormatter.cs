@@ -6,8 +6,8 @@ public static class LogFormatter
 {
     public static string Format(LogType type, string message)
     {
-        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-        string typeLabel = type.ToString().ToUpper();
-        return $"[{timestamp}] [{typeLabel}] {message}";
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+        var level = type.ToString().ToUpper().PadRight(7);
+        return $"[{timestamp}] [{level}] {message}";
     }
 }
