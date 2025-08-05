@@ -1,67 +1,58 @@
-using System;
 using System.IO.Pipes;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json;
 
-namespace IoboardServer
+namespace IoboardServer;
+
+public class PipeHandler
 {
-    public class PipeHandler
+    private readonly NamedPipeServerStream _pipeServer;
+    private readonly Action<string> _onReceive;
+
+    public PipeHandler(string pipeName, Action<string> onReceive)
     {
-        private bool _running;
-        private Task _serverTask;
-        private CancellationTokenSource _cts;
+        _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        _onReceive = onReceive;
+    }
 
-        public void Start()
+    public async Task StartAsync(CancellationToken token)
+    {
+        try
         {
-            _running = true;
-            _cts = new CancellationTokenSource();
-            _serverTask = Task.Run(() => RunServer(_cts.Token));
-        }
-
-        public void Stop()
-        {
-            _running = false;
-            _cts?.Cancel();
-            _serverTask?.Wait();
-        }
-
-        private void RunServer(CancellationToken token)
-        {
-            Console.WriteLine("NamedPipeServer started.");
-
-            while (_running && !token.IsCancellationRequested)
+            await _pipeServer.WaitForConnectionAsync(token);
+            using var reader = new StreamReader(_pipeServer, Encoding.UTF8);
+            while (!token.IsCancellationRequested)
             {
-                try
+                string? line = await reader.ReadLineAsync();
+                if (line != null)
                 {
-                    using var pipeServer = new NamedPipeServerStream("IOBOARD_PIPE", PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                    Console.WriteLine("Waiting for client connection...");
-                    pipeServer.WaitForConnection();
-
-                    Console.WriteLine("Client connected.");
-
-                    var buffer = new byte[256];
-                    int bytesRead;
-
-                    while ((bytesRead = pipeServer.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        var received = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                        Console.WriteLine($"Received: {received}");
-
-                        // echo back
-                        var response = Encoding.ASCII.GetBytes($"Echo: {received}");
-                        pipeServer.Write(response, 0, response.Length);
-                    }
-
-                    Console.WriteLine("Client disconnected.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[Pipe Error] {ex.Message}");
+                    _onReceive(line);
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常なキャンセル
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PipeHandler error: {ex.Message}");
+        }
+    }
 
-            Console.WriteLine("NamedPipeServer stopped.");
+    public async Task SendAsync(object message)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(message);
+            byte[] data = Encoding.UTF8.GetBytes(json + "\n");
+            await _pipeServer.WriteAsync(data, 0, data.Length);
+            await _pipeServer.FlushAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SendAsync error: {ex.Message}");
         }
     }
 }
