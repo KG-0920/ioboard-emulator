@@ -1,29 +1,27 @@
-using System;
-using System.IO;
+using System.Xml.Linq;
 
-namespace SharedConfig
+namespace SharedConfig;
+
+public class ConfigLocator
 {
-    public static class ConfigLocator
+    public static string GetConfigFilePath(string fileName)
     {
-        private const string ConfigFileName = "IoboardConfig.xml";
-
-        public static string GetConfigFilePath()
+        string? directory = AppContext.BaseDirectory;
+        while (directory != null)
         {
-            string? dir = AppDomain.CurrentDomain.BaseDirectory;
+            string fullPath = Path.Combine(directory, fileName);
+            if (File.Exists(fullPath))
+                return fullPath;
 
-            while (!string.IsNullOrEmpty(dir))
-            {
-                string configPath = Path.Combine(dir, ConfigFileName);
-                if (File.Exists(configPath))
-                {
-                    return configPath;
-                }
-
-                dir = Directory.GetParent(dir)?.FullName;
-            }
-
-            // 最終的に見つからなければ例外をスロー
-            throw new FileNotFoundException($"{ConfigFileName} が見つかりません。");
+            directory = Directory.GetParent(directory)?.FullName;
         }
+
+        throw new FileNotFoundException($"{fileName} が見つかりませんでした。親ディレクトリも確認しました。", fileName);
+    }
+
+    public static XDocument LoadConfigXml(string fileName)
+    {
+        string path = GetConfigFilePath(fileName);
+        return XDocument.Load(path);
     }
 }
