@@ -1,55 +1,82 @@
-using System;
+using System.Drawing;
 using System.Windows.Forms;
-using SharedConfig;
-using IoboardServerApp;
 
-namespace IoboardServerApp
+namespace IoboardServer;
+
+public partial class MainForm : Form
 {
-    public partial class MainForm : Form
+    private readonly int _boardId;
+    private readonly Label[] _inputLabels = new Label[32];
+    private readonly Label[] _outputLabels = new Label[32];
+
+    public MainForm(int boardId)
     {
-        private PipeHandler? _pipeHandler;
+        _boardId = boardId;
+        InitializeComponent();
+        Text = $"I/O Board RSW {_boardId}";
+        Size = new Size(600, 300);
+        InitControls();
+    }
 
-        public MainForm()
+    private void InitControls()
+    {
+        var inputPanel = new FlowLayoutPanel
         {
-            InitializeComponent();
-            Text = "Ioboard Server";
-            Width = 500;
-            Height = 300;
-            Load += MainForm_Load;
-            FormClosing += MainForm_FormClosing;
-        }
+            Location = new Point(10, 10),
+            Size = new Size(270, 240),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        var outputPanel = new FlowLayoutPanel
+        {
+            Location = new Point(300, 10),
+            Size = new Size(270, 240),
+            BorderStyle = BorderStyle.FixedSingle
+        };
 
-        private void MainForm_Load(object? sender, EventArgs e)
+        Label CreateLabel(string title)
         {
-            try
+            return new Label
             {
-                Log("設定ファイル読み込み中...");
-                var config = ConfigLocator.Config;
-                Log("設定読み込み成功");
-
-                _pipeHandler = new PipeHandler(config);
-                _pipeHandler.Start();
-
-                Log("パイプサーバー起動成功");
-            }
-            catch (Exception ex)
-            {
-                Log($"エラー: {ex.Message}");
-                MessageBox.Show($"起動に失敗しました: {ex.Message}", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                Close();
-            }
+                Text = title,
+                AutoSize = false,
+                Width = 60,
+                Height = 20,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.LightGray,
+                Margin = new Padding(3)
+            };
         }
 
-        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
+        for (int i = 0; i < 32; i++)
         {
-            _pipeHandler?.Stop();
-            Log("サーバー停止");
+            _inputLabels[i] = CreateLabel($"IN{i:D2}");
+            inputPanel.Controls.Add(_inputLabels[i]);
+
+            _outputLabels[i] = CreateLabel($"OUT{i:D2}");
+            outputPanel.Controls.Add(_outputLabels[i]);
         }
 
-        private void Log(string message)
+        Controls.Add(inputPanel);
+        Controls.Add(outputPanel);
+    }
+
+    public void UpdateInput(int port, bool value)
+    {
+        if (InvokeRequired)
         {
-            string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
-            File.AppendAllText("debug_log.txt", logLine + Environment.NewLine);
+            Invoke(() => UpdateInput(port, value));
+            return;
         }
+        _inputLabels[port].BackColor = value ? Color.Lime : Color.LightGray;
+    }
+
+    public void UpdateOutput(int port, bool value)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(() => UpdateOutput(port, value));
+            return;
+        }
+        _outputLabels[port].BackColor = value ? Color.OrangeRed : Color.LightGray;
     }
 }
