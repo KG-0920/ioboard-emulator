@@ -1,76 +1,74 @@
-using System.Collections.Generic;
-using System.Windows.Forms;
+using System.Collections.Concurrent;
+using Common;
 
-namespace IoboardServer
+namespace IoboardServer;
+
+public class BoardManager
 {
-    public static class BoardManager
+    private class BoardInstance
     {
-        private static readonly Dictionary<int, bool[]> OutputStates = new();
-        private static readonly Dictionary<int, bool[]> InputStates = new();
-        private static readonly Dictionary<int, MainForm> Forms = new();
+        public int RotarySwitch { get; set; }
+        public MainForm? Form { get; set; }
+        public bool[] InputStates = new bool[32];
+        public bool[] OutputStates = new bool[32];
+        public bool FormCreated => Form != null;
 
-        public static bool Open(int rotarySwitchNo)
+        public void EnsureFormCreated(int boardId)
         {
-            if (!OutputStates.ContainsKey(rotarySwitchNo))
+            if (Form == null)
             {
-                OutputStates[rotarySwitchNo] = new bool[8];
-                InputStates[rotarySwitchNo] = new bool[8];
-            }
-            return true;
-        }
-
-        public static void Close(int rotarySwitchNo)
-        {
-            OutputStates.Remove(rotarySwitchNo);
-            InputStates.Remove(rotarySwitchNo);
-
-            if (Forms.TryGetValue(rotarySwitchNo, out var form))
-            {
-                form.Invoke(() => form.Close());
-                Forms.Remove(rotarySwitchNo);
+                Form = new MainForm(boardId);
+                Task.Run(() => Application.Run(Form));
             }
         }
+    }
 
-        public static void WriteOutput(int rotarySwitchNo, int port, bool value)
+    private readonly ConcurrentDictionary<int, BoardInstance> _boards = new();
+
+    public bool Open(int rotarySwitchNo)
+    {
+        if (_boards.ContainsKey(rotarySwitchNo)) return false;
+
+        var board = new BoardInstance { RotarySwitch = rotarySwitchNo };
+        _boards[rotarySwitchNo] = board;
+        return true;
+    }
+
+    public void Close(int rotarySwitchNo)
+    {
+        if (_boards.TryRemove(rotarySwitchNo, out var board))
         {
-            if (!OutputStates.ContainsKey(rotarySwitchNo))
-                return;
-
-            OutputStates[rotarySwitchNo][port] = value;
-
-            var form = EnsureForm(rotarySwitchNo);
-            form.Invoke(() => form.SetPortState(port, value));
-        }
-
-        public static bool ReadInput(int rotarySwitchNo, int port)
-        {
-            var form = EnsureForm(rotarySwitchNo);
-            return InputStates[rotarySwitchNo][port];
-        }
-
-        public static void SetInputState(int rotarySwitchNo, int port, bool value)
-        {
-            if (InputStates.ContainsKey(rotarySwitchNo))
+            if (board.Form != null)
             {
-                InputStates[rotarySwitchNo][port] = value;
+                board.Form.Invoke(() => board.Form!.Close());
             }
         }
+    }
 
-        private static MainForm EnsureForm(int rotarySwitchNo)
-        {
-            if (!Forms.ContainsKey(rotarySwitchNo))
-            {
-                var form = new MainForm();
-                form.SetRotarySwitchNo(rotarySwitchNo);
-                Forms[rotarySwitchNo] = form;
+    public void WriteOutput(int rotarySwitchNo, int port, bool value)
+    {
+        if (!_boards.TryGetValue(rotarySwitchNo, out var board)) return;
 
-                // 初回のみ非同期で表示
-                new System.Threading.Thread(() =>
-                {
-                    Application.Run(form);
-                }).Start();
-            }
-            return Forms[rotarySwitchNo];
-        }
+        board.OutputStates[port] = value;
+
+        board.EnsureFormCreated(rotarySwitchNo);
+        board.Form?.UpdateOutput(port, value);
+    }
+
+    public bool ReadInput(int rotarySwitchNo, int port)
+    {
+        if (!_boards.TryGetValue(rotarySwitchNo, out var board)) return false;
+
+        board.EnsureFormCreated(rotarySwitchNo);
+        return board.InputStates[port];
+    }
+
+    public void UpdateInput(int rotarySwitchNo, int port, bool value)
+    {
+        if (!_boards.TryGetValue(rotarySwitchNo, out var board)) return;
+
+        board.InputStates[port] = value;
+        board.EnsureFormCreated(rotarySwitchNo);
+        board.Form?.UpdateInput(port, value);
     }
 }
