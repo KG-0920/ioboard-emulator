@@ -4,57 +4,65 @@ namespace SharedConfig
 {
     public class IoboardConfig
     {
-        public List<IoboardSetting> Boards { get; set; } = new();
+        public class PortInfo
+        {
+            public int Index { get; set; }
+            public string Name { get; set; } = "";
+        }
 
-        public static IoboardConfig Load(string path)
+        public class BoardInfo
+        {
+            public int RotarySwitchNo { get; set; }
+            public string DeviceName { get; set; } = "";
+            public List<PortInfo> InputPorts { get; set; } = new();
+            public List<PortInfo> OutputPorts { get; set; } = new();
+        }
+
+        public List<BoardInfo> Boards { get; set; } = new();
+
+        public static IoboardConfig Load(string xmlPath)
         {
             var config = new IoboardConfig();
+            var doc = XDocument.Load(xmlPath);
 
-            if (!File.Exists(path))
-                return config;
-
-            var doc = XDocument.Load(path);
-            var root = doc.Root;
-            if (root == null) return config;
-
-            foreach (var elem in root.Elements("Board"))
+            foreach (var boardElem in doc.Descendants("Board"))
             {
-                if (int.TryParse(elem.Element("RSW")?.Value, out var rsw) &&
-                    int.TryParse(elem.Element("InputCount")?.Value, out var inCount) &&
-                    int.TryParse(elem.Element("OutputCount")?.Value, out var outCount))
+                var board = new BoardInfo
                 {
-                    config.Boards.Add(new IoboardSetting
+                    RotarySwitchNo = (int?)boardElem.Attribute("RotarySwitchNo") ?? -1,
+                    DeviceName = (string?)boardElem.Attribute("DeviceName") ?? ""
+                };
+
+                var inputPortsElem = boardElem.Element("InputPorts");
+                if (inputPortsElem != null)
+                {
+                    foreach (var portElem in inputPortsElem.Elements("Port"))
                     {
-                        RotarySwitchNo = rsw,
-                        InputPortCount = inCount,
-                        OutputPortCount = outCount
-                    });
+                        board.InputPorts.Add(new PortInfo
+                        {
+                            Index = (int?)portElem.Attribute("Index") ?? -1,
+                            Name = (string?)portElem.Attribute("Name") ?? ""
+                        });
+                    }
                 }
+
+                var outputPortsElem = boardElem.Element("OutputPorts");
+                if (outputPortsElem != null)
+                {
+                    foreach (var portElem in outputPortsElem.Elements("Port"))
+                    {
+                        board.OutputPorts.Add(new PortInfo
+                        {
+                            Index = (int?)portElem.Attribute("Index") ?? -1,
+                            Name = (string?)portElem.Attribute("Name") ?? ""
+                        });
+                    }
+                }
+
+                config.Boards.Add(board);
             }
 
             return config;
-        }
-
-        public void Save(string path)
-        {
-            var doc = new XDocument(
-                new XElement("IoboardConfig",
-                    Boards.Select(board =>
-                        new XElement("Board",
-                            new XElement("RSW", board.RotarySwitchNo),
-                            new XElement("InputCount", board.InputPortCount),
-                            new XElement("OutputCount", board.OutputPortCount)
-                        )
-                    )
-                )
-            );
-
-            doc.Save(path);
-        }
-
-        public IoboardSetting? FindByRSW(int rswNo)
-        {
-            return Boards.FirstOrDefault(b => b.RotarySwitchNo == rswNo);
         }
     }
 }
