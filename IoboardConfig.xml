@@ -1,142 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Ioboard>
-  <Board RotarySwitchNo="0" DeviceName="FBIDIO0">
-    <InputPorts Count="32">
-      <Port Index="0" Name="IN0" />
-      <Port Index="1" Name="IN1" />
-      <Port Index="2" Name="IN2" />
-      <Port Index="3" Name="IN3" />
-      <Port Index="4" Name="IN4" />
-      <Port Index="5" Name="IN5" />
-      <Port Index="6" Name="IN6" />
-      <Port Index="7" Name="IN7" />
-      <Port Index="8" Name="IN8" />
-      <Port Index="9" Name="IN9" />
-      <Port Index="10" Name="IN10" />
-      <Port Index="11" Name="IN11" />
-      <Port Index="12" Name="IN12" />
-      <Port Index="13" Name="IN13" />
-      <Port Index="14" Name="IN14" />
-      <Port Index="15" Name="IN15" />
-      <Port Index="16" Name="IN16" />
-      <Port Index="17" Name="IN17" />
-      <Port Index="18" Name="IN18" />
-      <Port Index="19" Name="IN19" />
-      <Port Index="20" Name="IN20" />
-      <Port Index="21" Name="IN21" />
-      <Port Index="22" Name="IN22" />
-      <Port Index="23" Name="IN23" />
-      <Port Index="24" Name="IN24" />
-      <Port Index="25" Name="IN25" />
-      <Port Index="26" Name="IN26" />
-      <Port Index="27" Name="IN27" />
-      <Port Index="28" Name="IN28" />
-      <Port Index="29" Name="IN29" />
-      <Port Index="30" Name="IN30" />
-      <Port Index="31" Name="IN31" />
-    </InputPorts>
-    <OutputPorts Count="32">
-      <Port Index="0" Name="OUT0" />
-      <Port Index="1" Name="OUT1" />
-      <Port Index="2" Name="OUT2" />
-      <Port Index="3" Name="OUT3" />
-      <Port Index="4" Name="OUT4" />
-      <Port Index="5" Name="OUT5" />
-      <Port Index="6" Name="OUT6" />
-      <Port Index="7" Name="OUT7" />
-      <Port Index="8" Name="OUT8" />
-      <Port Index="9" Name="OUT9" />
-      <Port Index="10" Name="OUT10" />
-      <Port Index="11" Name="OUT11" />
-      <Port Index="12" Name="OUT12" />
-      <Port Index="13" Name="OUT13" />
-      <Port Index="14" Name="OUT14" />
-      <Port Index="15" Name="OUT15" />
-      <Port Index="16" Name="OUT16" />
-      <Port Index="17" Name="OUT17" />
-      <Port Index="18" Name="OUT18" />
-      <Port Index="19" Name="OUT19" />
-      <Port Index="20" Name="OUT20" />
-      <Port Index="21" Name="OUT21" />
-      <Port Index="22" Name="OUT22" />
-      <Port Index="23" Name="OUT23" />
-      <Port Index="24" Name="OUT24" />
-      <Port Index="25" Name="OUT25" />
-      <Port Index="26" Name="OUT26" />
-      <Port Index="27" Name="OUT27" />
-      <Port Index="28" Name="OUT28" />
-      <Port Index="29" Name="OUT29" />
-      <Port Index="30" Name="OUT30" />
-      <Port Index="31" Name="OUT31" />
-    </OutputPorts>
-  </Board>
-  <Board RotarySwitchNo="1" DeviceName="FBIDIO1">
-    <InputPorts Count="0" />
-    <OutputPorts Count="64">
-      <Port Index="0" Name="OUT0" />
-      <Port Index="1" Name="OUT1" />
-      <Port Index="2" Name="OUT2" />
-      <Port Index="3" Name="OUT3" />
-      <Port Index="4" Name="OUT4" />
-      <Port Index="5" Name="OUT5" />
-      <Port Index="6" Name="OUT6" />
-      <Port Index="7" Name="OUT7" />
-      <Port Index="8" Name="OUT8" />
-      <Port Index="9" Name="OUT9" />
-      <Port Index="10" Name="OUT10" />
-      <Port Index="11" Name="OUT11" />
-      <Port Index="12" Name="OUT12" />
-      <Port Index="13" Name="OUT13" />
-      <Port Index="14" Name="OUT14" />
-      <Port Index="15" Name="OUT15" />
-      <Port Index="16" Name="OUT16" />
-      <Port Index="17" Name="OUT17" />
-      <Port Index="18" Name="OUT18" />
-      <Port Index="19" Name="OUT19" />
-      <Port Index="20" Name="OUT20" />
-      <Port Index="21" Name="OUT21" />
-      <Port Index="22" Name="OUT22" />
-      <Port Index="23" Name="OUT23" />
-      <Port Index="24" Name="OUT24" />
-      <Port Index="25" Name="OUT25" />
-      <Port Index="26" Name="OUT26" />
-      <Port Index="27" Name="OUT27" />
-      <Port Index="28" Name="OUT28" />
-      <Port Index="29" Name="OUT29" />
-      <Port Index="30" Name="OUT30" />
-      <Port Index="31" Name="OUT31" />
-      <Port Index="32" Name="OUT32" />
-      <Port Index="33" Name="OUT33" />
-      <Port Index="34" Name="OUT34" />
-      <Port Index="35" Name="OUT35" />
-      <Port Index="36" Name="OUT36" />
-      <Port Index="37" Name="OUT37" />
-      <Port Index="38" Name="OUT38" />
-      <Port Index="39" Name="OUT39" />
-      <Port Index="40" Name="OUT40" />
-      <Port Index="41" Name="OUT41" />
-      <Port Index="42" Name="OUT42" />
-      <Port Index="43" Name="OUT43" />
-      <Port Index="44" Name="OUT44" />
-      <Port Index="45" Name="OUT45" />
-      <Port Index="46" Name="OUT46" />
-      <Port Index="47" Name="OUT47" />
-      <Port Index="48" Name="OUT48" />
-      <Port Index="49" Name="OUT49" />
-      <Port Index="50" Name="OUT50" />
-      <Port Index="51" Name="OUT51" />
-      <Port Index="52" Name="OUT52" />
-      <Port Index="53" Name="OUT53" />
-      <Port Index="54" Name="OUT54" />
-      <Port Index="55" Name="OUT55" />
-      <Port Index="56" Name="OUT56" />
-      <Port Index="57" Name="OUT57" />
-      <Port Index="58" Name="OUT58" />
-      <Port Index="59" Name="OUT59" />
-      <Port Index="60" Name="OUT60" />
-      <Port Index="61" Name="OUT61" />
-      <Port Index="62" Name="OUT62" />
-      <Port Index="63" Name="OUT63" />
-    </OutputPorts>
-  </Board>
-</Ioboard>
+<IoboardConfig>
+  <Boards>
+    <Board>
+      <RotarySwitchNo>0</RotarySwitchNo>
+      <BoardName>FBIDIO0</BoardName>
+      <InputPorts>8</InputPorts>
+      <OutputPorts>8</OutputPorts>
+    </Board>
+    <Board>
+      <RotarySwitchNo>1</RotarySwitchNo>
+      <BoardName>FBIDIO1</BoardName>
+      <InputPorts>8</InputPorts>
+      <OutputPorts>8</OutputPorts>
+    </Board>
+  </Boards>
+</IoboardConfig>
