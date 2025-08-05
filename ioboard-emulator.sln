@@ -5,6 +5,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoboardServer", "IoboardServer\IoboardServer.csproj", "{8D2F2213-4E5F-4A34-88B7-1234567890A1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoboardEmulator", "IoboardEmulator\IoboardEmulator.csproj", "{1C7DDB7F-F1E2-4F20-97F4-1234567890A2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{2F11A23C-5C34-4BEA-AE4E-1234567890A3} = {2F11A23C-5C34-4BEA-AE4E-1234567890A3}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{2F11A23C-5C34-4BEA-AE4E-1234567890A3}"
 EndProject
@@ -29,5 +32,8 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7C000835-FE58-4698-831A-7F27CACEFA97}
 	EndGlobalSection
 EndGlobal
