@@ -8,17 +8,12 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="..\SharedConfig\ConfigLocator.cs" Link="SharedConfig\ConfigLocator.cs" />
-    <Compile Include="..\SharedConfig\IoboardConfig.cs" Link="SharedConfig\IoboardConfig.cs" />
-    <Compile Include="..\SharedConfig\IoboardSetting.cs" Link="SharedConfig\IoboardSetting.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="SharedConfig\" />
+    <Compile Include="..\SharedConfig\**\*.cs" Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
