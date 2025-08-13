@@ -1,10 +1,18 @@
 using System.Collections.Concurrent;
-using Common;
+using SharedConfig;
 
 namespace IoboardServer;
 
 public class BoardManager
 {
+    private readonly IoboardConfig _config; // ★ 追加
+    
+    // ★ 追加: Program.cs の new BoardManager(config) に合わせる
+    public BoardManager(IoboardConfig config)
+    {
+        _config = config;
+    }
+    
     private class BoardInstance
     {
         public int RotarySwitch { get; set; }
