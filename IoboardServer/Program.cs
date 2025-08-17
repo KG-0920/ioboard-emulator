@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace IoboardServerApp
+namespace IoboardServer
 {
     internal static class Program
     {
@@ -22,19 +22,17 @@ namespace IoboardServerApp
                 if (!suppressKill)
                 {
                     KillOtherInstances();
-                    // 少し待ってから続行（置き換えとして現在プロセスを起動）
-                    Thread.Sleep(1000);
+                    Thread.Sleep(1000); // 終了待ち
                 }
                 else
                 {
-                    MessageBox.Show("別インスタンスが起動中です。", "IoboardServer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("既に起動中です。", "IoboardServer", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
             }
 
             ApplicationConfiguration.Initialize();
-            // MainForm は既存のものに合わせてください
-            Application.Run(new MainForm());
+            Application.Run(new IoboardForm()); // ← フォーム名が違う場合は修正
         }
 
         private static void KillOtherInstances()
@@ -42,23 +40,12 @@ namespace IoboardServerApp
             try
             {
                 var current = Process.GetCurrentProcess();
-                var name = current.ProcessName;
-
-                var others = Process.GetProcessesByName(name)
-                                    .Where(p => p.Id != current.Id)
-                                    .ToList();
-
-                foreach (var p in others)
+                foreach (var p in Process.GetProcessesByName(current.ProcessName).Where(p => p.Id != current.Id))
                 {
-                    try
-                    {
-                        p.Kill(entireProcessTree: true);
-                        p.WaitForExit(3000);
-                    }
-                    catch { /* ignore */ }
+                    try { p.Kill(entireProcessTree: true); p.WaitForExit(3000); } catch { }
                 }
             }
-            catch { /* ignore */ }
+            catch { }
         }
     }
 }

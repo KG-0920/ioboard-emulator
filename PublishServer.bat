@@ -1,31 +1,23 @@
 @echo off
 setlocal
 
-REM === Settings ===
 set SOLUTION=ioboard-emulator.sln
 set PROJECT=IoboardServer\IoboardServer.csproj
 set CONF=Release
 set OUTDIR=publish
 
-REM Clean output
 if exist "%OUTDIR%" rmdir /s /q "%OUTDIR%"
 
-echo.
 echo === Restore ===
-dotnet restore "%SOLUTION%"
-if errorlevel 1 exit /b 1
+dotnet restore "%SOLUTION%" || exit /b 1
 
-echo.
 echo === Publish x64 ===
-dotnet publish "%PROJECT%" -c %CONF% -r win-x64 --self-contained false -o "%OUTDIR%\win-x64"
-if errorlevel 1 exit /b 1
+dotnet publish "%PROJECT%" -c %CONF% -r win-x64 --self-contained false -o "%OUTDIR%\win-x64" || exit /b 1
 
-echo.
 echo === Publish x86 ===
-dotnet publish "%PROJECT%" -c %CONF% -r win-x86 --self-contained false -o "%OUTDIR%\win-x86"
-if errorlevel 1 exit /b 1
+dotnet publish "%PROJECT%" -c %CONF% -r win-x86 --self-contained false -o "%OUTDIR%\win-x86" || exit /b 1
 
-REM === IoLogConfig.xml の同梱（ルート配置前提） ===
+REM ルートの IoLogConfig.xml を同梱（無ければ雛形を生成）
 set LOGCFG=IoLogConfig.xml
 if exist "%LOGCFG%" (
   copy /y "%LOGCFG%" "%OUTDIR%\win-x64\%LOGCFG%" >nul
@@ -35,10 +27,7 @@ if exist "%LOGCFG%" (
   echo ^<LogConfig^>^<Level^>Info^</Level^>^</LogConfig^> > "%OUTDIR%\win-x86\IoLogConfig.xml"
 )
 
-echo.
 echo === Done ===
-echo Output:
-echo   %OUTDIR%\win-x64
-echo   %OUTDIR%\win-x86
+echo Output: %OUTDIR%\win-x64, %OUTDIR%\win-x86
 
 endlocal

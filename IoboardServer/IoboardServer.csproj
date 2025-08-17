@@ -2,20 +2,22 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- AnyCPU ベース。RIDは publish 時に指定。 -->
+    <Nullable>enable</Nullable>
+    <!-- AnyCPU ベース。RIDは publish 時に指定する運用 -->
     <Platforms>AnyCPU</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- 共通プロジェクト参照 -->
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
-  <!-- SharedConfig はリンク取り込み（共通ディレクトリ参照） -->
+  <!-- SharedConfig は“共通ディレクトリ”をリンク取り込み（再帰） -->
   <ItemGroup>
-    <Compile Include="..\SharedConfig\**\*.cs" Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\SharedConfig\**\*.cs"
+             Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
