@@ -3,32 +3,52 @@ using System.Runtime.InteropServices;
 
 namespace IoBoardWrapper
 {
+    /// <summary>
+    /// Wrapper that switches native DLL between emulator (Debug) and real board (Release).
+    /// Exports used are unified as DioOpen/DioClose/DioWriteOutput/DioReadInput.
+    /// </summary>
     public class IoboardWrapper : IIoBoardController
     {
-        [DllImport("IoboardEmulator.dll", CallingConvention = CallingConvention.StdCall)]
-        private static extern int RegisterDioHandle([MarshalAs(UnmanagedType.LPStr)] string boardName);
+#if DEBUG
+        private const string DllName = "IoboardEmulator.dll"; // NativeAOT export from IoboardEmulator
+#else
+        private const string DllName = "fbidio.dll";          // Real device DLL (assumed same exports)
+#endif
 
-        [DllImport("IoboardEmulator.dll", CallingConvention = CallingConvention.StdCall)]
-        private static extern void UnregisterDioHandle();
+        // --- Native bindings ---
+        [DllImport(DllName, EntryPoint = "DioOpen", CallingConvention = CallingConvention.StdCall)]
+        private static extern int DioOpen(int rotarySwitchNo);
 
-        [DllImport("IoboardEmulator.dll", CallingConvention = CallingConvention.StdCall)]
-        private static extern void SetOutput(int port, int value);
+        [DllImport(DllName, EntryPoint = "DioClose", CallingConvention = CallingConvention.StdCall)]
+        private static extern void DioClose(int rotarySwitchNo);
 
-        [DllImport("IoboardEmulator.dll", CallingConvention = CallingConvention.StdCall)]
-        private static extern int GetInput(int port);
+        [DllImport(DllName, EntryPoint = "DioWriteOutput", CallingConvention = CallingConvention.StdCall)]
+        private static extern void DioWriteOutput(int rotarySwitchNo, int port, bool value);
 
-        private string _boardName = "FBIDIO0";
+        [DllImport(DllName, EntryPoint = "DioReadInput", CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool DioReadInput(int rotarySwitchNo, int port);
 
+        // --- IIoBoardController ---
         public bool Open(int rotarySwitchNo)
         {
-            _boardName = $"FBIDIO{rotarySwitchNo}";
             try
             {
-                return RegisterDioHandle(_boardName) == 0;
+                return DioOpen(rotarySwitchNo) != 0;
+            }
+            catch (DllNotFoundException ex)
+            {
+                Console.WriteLine($"[IoboardWrapper] DLL not found: {ex.Message}");
+                return false;
+            }
+            catch (EntryPointNotFoundException ex)
+            {
+                Console.WriteLine($"[IoboardWrapper] Entry point not found in {DllName}: {ex.Message}");
+                return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Open error: {ex.Message}");
+                Console.WriteLine($"[IoboardWrapper] Open error: {ex.Message}");
                 return false;
             }
         }
@@ -37,11 +57,11 @@ namespace IoBoardWrapper
         {
             try
             {
-                UnregisterDioHandle();
+                DioClose(rotarySwitchNo);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Close error: {ex.Message}");
+                Console.WriteLine($"[IoboardWrapper] Close error: {ex.Message}");
             }
         }
 
@@ -49,11 +69,11 @@ namespace IoBoardWrapper
         {
             try
             {
-                SetOutput(port, value ? 1 : 0);
+                DioWriteOutput(rotarySwitchNo, port, value);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WriteOutput error: {ex.Message}");
+                Console.WriteLine($"[IoboardWrapper] WriteOutput error: {ex.Message}");
             }
         }
 
@@ -61,11 +81,11 @@ namespace IoBoardWrapper
         {
             try
             {
-                return GetInput(port) != 0;
+                return DioReadInput(rotarySwitchNo, port);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ReadInput error: {ex.Message}");
+                Console.WriteLine($"[IoboardWrapper] ReadInput error: {ex.Message}");
                 return false;
             }
         }
