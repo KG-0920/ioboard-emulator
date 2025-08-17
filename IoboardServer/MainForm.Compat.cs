@@ -58,16 +58,6 @@ namespace IoboardServer
             });
         }
 
-        // 任意: ログ出力の補助。必要な場面で呼び出せるように置いておきます。
-        private void AppendLog(string message)
-        {
-            if (logTextBox is null || logTextBox.IsDisposed) return;
-            this.SafeInvoke(() =>
-            {
-                logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
-            });
-        }
-
         private static void EnsureRowCount(DataGridView grid, int required)
         {
             while (grid.Rows.Count < required)
