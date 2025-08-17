@@ -5,7 +5,8 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- AnyCPU ベース。RIDは publish 時に指定。 -->
+    <Platforms>AnyCPU</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -13,6 +14,7 @@
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
+  <!-- SharedConfig はリンク取り込み（共通ディレクトリ参照） -->
   <ItemGroup>
     <Compile Include="..\SharedConfig\**\*.cs" Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
