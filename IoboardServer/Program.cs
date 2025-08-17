@@ -22,7 +22,7 @@ namespace IoboardServer
                 if (!suppressKill)
                 {
                     KillOtherInstances();
-                    Thread.Sleep(1000); // 終了待ち
+                    Thread.Sleep(1000);
                 }
                 else
                 {
@@ -32,7 +32,7 @@ namespace IoboardServer
             }
 
             ApplicationConfiguration.Initialize();
-            Application.Run(new IoboardForm()); // ← フォーム名が違う場合は修正
+            Application.Run(new MainForm()); // ← ここを MainForm に統一
         }
 
         private static void KillOtherInstances()
