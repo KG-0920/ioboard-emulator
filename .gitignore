@@ -1,0 +1,57 @@
+# --- Visual Studio / .NET build artifacts ---
+# Solutions / IDE
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+
+# Publish outputs
+publish/
+
+# Test
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+# packages/ (昔の構成向け: 必要なら有効化)
+# packages/
+
+# Cache
+*.cache
+*.db
+*.ide/
+*.ipch
+*.opendb
+
+# Rider / VS Code (必要に応じて)
+.idea/
+.vscode/
+*.code-workspace
+
+# Temp
+~$*
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Optional: if you generate artifacts under IoboardEmulator NativeAOT
+IoboardEmulator/**/artifacts/
+
+# Logs (ビルド出力のログが大量に出る場合)
+*.log
+
+# NOTE:
+# IoLogConfig.xml は"構成"としてリポジトリに残す想定なので除外しません。
