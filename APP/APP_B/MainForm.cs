@@ -1,52 +1,89 @@
 using System;
+using System.Linq;
 using System.Windows.Forms;
-using IoBoardWrapper;
-using SharedConfig;
+using IoBoardWrapper;   // IIoBoardController / IoboardWrapper
+using SharedConfig;     // ConfigLocator / IoboardConfig
 
 namespace APP_B
 {
     public partial class MainForm : Form
     {
-        private IIoBoardController _controller;
-        private IoboardConfig _config;
-        private int _rotarySwitchNo = 0;
+        private readonly IIoBoardController _controller;
+        private IoboardConfig _config = null!;
+        private int _rotarySwitchNo = 0; // 設定から取れない場合のフォールバック
 
         public MainForm()
         {
             InitializeComponent();
 
-            // 設定読み込みとスイッチ番号取得
-            _config = IoboardConfig.Load(ConfigLocator.GetConfigPath());
+            // 1) 設定ファイルのパス取得（上位探索込み）
+            //    実際のファイル名に合わせてください。デフォルト想定は "IoboardConfig.xml"。
+            var cfgPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");
 
-            if (int.TryParse(_config.BoardName.Replace("FBIDIO", ""), out int rswNo))
+            // 2) 設定ロード（XML）
+            _config = IoboardConfig.Load(cfgPath);
+
+            // 3) ボード情報の決定
+            //    RotarySwitchNo を使う設計なら、必要に応じて IoboardSetting などから番号を取得し、Where で選別してください。
+            //    ここでは最初の定義を採用（単一ボード想定のフォールバック）。
+            var board = (_config?.Boards != null && _config.Boards.Count > 0)
+                ? _config.Boards[0]
+                : null;
+
+            if (board != null)
             {
-                _rotarySwitchNo = rswNo;
+                _rotarySwitchNo = board.RotarySwitchNo;
+                this.Text = $"APP_B - {board.DeviceName}";
+            }
+            else
+            {
+                this.Text = "APP_B - I/O Board";
             }
 
+            // 4) I/O コントローラ初期化
             _controller = new IoboardWrapper();
 
+            // 5) Open
             bool success = _controller.Open(_rotarySwitchNo);
             AppendLog(success ? "Open 成功" : "Open 失敗");
         }
 
         private void MainForm_FormClosed(object sender, FormClosedEventArgs e)
         {
+            try
+            {
             _controller.Close(_rotarySwitchNo);
+        }
+            catch { /* ignore */ }
         }
 
         private void buttonSetOutput_Click(object sender, EventArgs e)
         {
             int port = (int)numericPort.Value;
             bool value = checkOutput.Checked;
+            try
+            {
             _controller.WriteOutput(_rotarySwitchNo, port, value);
             AppendLog($"WriteOutput({port}, {value}) 実行");
+        }
+            catch (Exception ex)
+            {
+                AppendLog($"WriteOutput 失敗: {ex.Message}");
+            }
         }
 
         private void buttonGetInput_Click(object sender, EventArgs e)
         {
             int port = (int)numericPort.Value;
+            try
+            {
             bool result = _controller.ReadInput(_rotarySwitchNo, port);
             AppendLog($"ReadInput({port}) = {result}");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"ReadInput 失敗: {ex.Message}");
+            }
         }
 
         private void AppendLog(string message)
