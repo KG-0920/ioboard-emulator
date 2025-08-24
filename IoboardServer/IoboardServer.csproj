@@ -8,6 +8,9 @@
     <!-- AnyCPU ベース。RIDは publish 時に指定する運用 -->
     <Platforms>AnyCPU</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <!-- 共通プロジェクト参照 -->
