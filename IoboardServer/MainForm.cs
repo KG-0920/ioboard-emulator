@@ -1,6 +1,8 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using SharedConfig;
+using System.Linq;
 
 namespace IoboardServer
 {
@@ -9,11 +11,15 @@ namespace IoboardServer
         private TableLayoutPanel inputTable;
         private TableLayoutPanel outputTable;
         private TextBox logTextBox;
+    	private IoboardConfig? _config;   // ★追加（必要なら）
 
-        public MainForm()
-        {
-            InitializeComponent();
-            InitializeCustomComponents();
+		public MainForm()
+		{
+		    InitializeComponent();
+		    InitializeCustomComponents();
+
+			var board = ResolveBoardFromConfig();                                         // ★追加
+			InitIoTables(board?.InputPorts?.Count ?? 16, board?.OutputPorts?.Count ?? 16); // ★追加
         }
 
         private void InitializeCustomComponents()
@@ -92,5 +98,32 @@ namespace IoboardServer
                 logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
             }
         }
+		// ★追記：Config からボードを一つ選ぶ（最初の1件 or Rotary指定に一致）
+		private IoboardConfig.BoardInfo? ResolveBoardFromConfig()
+		{
+		    try
+		    {
+		        var cfgPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");
+		        _config = IoboardConfig.Load(cfgPath);
+
+		        // Rotary で選びたい場合はここで取得して一致させる：
+		        // int rotary = <必要なら設定や引数から取得>;
+		        // return _config?.Boards?.FirstOrDefault(b => b.RotarySwitchNo == rotary);
+
+		        // まずは最初の1件を採用（null安全）
+		        if (_config?.Boards != null && _config.Boards.Count > 0)
+		        {
+		            var b = _config.Boards[0];
+		            // ウィンドウタイトルも設定名を反映（任意）
+		            this.Text = $"{this.Text} - {b.DeviceName}";
+		            return b;
+		        }
+		    }
+		    catch (Exception ex)
+		    {
+		    	AppendLog($"[Config] load error: {ex.Message}");
+		    }
+		    return null;
+		}
     }
 }

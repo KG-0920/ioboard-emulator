@@ -24,16 +24,16 @@ namespace IoboardServer
             });
         }
 
-        public void UpdateInput(int port, bool value)
-        {
-            if (inputTable is null || inputTable.IsDisposed) return;
-            this.SafeInvoke(() =>
-            {
-                EnsureTlpShape(inputTable, port + 1, minColumns: 2);
-                SetTlpCellText(inputTable, row: port, col: 0, text: port.ToString());
-                SetTlpCellText(inputTable, row: port, col: 1, text: value ? "ON" : "OFF");
-            });
-        }
+		public void UpdateInput(int port, bool value)
+		{
+		    if (inputTable is null || inputTable.IsDisposed) return;
+		    this.SafeInvoke(() =>
+		    {
+		        EnsureTlpShape(inputTable, port + 1, 2);
+		        EnsureInputRow(port);       // ★行が無ければ作る（CheckBox含む）
+		        SetInputValue(port, value); // ★CheckBoxへ反映
+		    });
+		}
 
         /// <summary>
         /// TableLayoutPanel の行/列を必要数まで拡張（不足セルには Label を自動配置）
@@ -95,5 +95,43 @@ namespace IoboardServer
             }
             // それ以外のコントロールなら何もしない（設計に従う）
         }
+
+    	private void InitIoTables(int inputCount, int outputCount)
+		{
+		    this.SafeInvoke(() =>
+		    {
+		        EnsureTlpShape(inputTable,  inputCount,  2);
+		        EnsureTlpShape(outputTable, outputCount, 2);
+		        for (int r = 0; r < inputCount;  r++) EnsureInputRow(r);
+		        for (int r = 0; r < outputCount; r++)
+		        {
+		            SetTlpCellText(outputTable, r, 0, r.ToString());
+		            SetTlpCellText(outputTable, r, 1, "OFF");
+		        }
+		    });
+		}
+
+		private void EnsureInputRow(int row)
+		{
+		    SetTlpCellText(inputTable, row, 0, row.ToString());
+		    var ctrl = inputTable.GetControlFromPosition(1, row);
+		    if (ctrl is not CheckBox cb)
+		    {
+		        cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left };
+		        cb.CheckedChanged += (s, e) =>
+		        {
+		            // ★サーバ側擬似入力の変更を反映（必要ならクライアントにも配信）
+		            AppendLog($"[Sim] Input {row} = {cb.Checked}");
+		            // TODO: PipeBroadcastInput(row, cb.Checked);
+		        };
+		        inputTable.Controls.Add(cb, 1, row);
+		    }
+		}
+
+		private void SetInputValue(int row, bool value)
+		{
+		    var ctrl = inputTable.GetControlFromPosition(1, row);
+		    if (ctrl is CheckBox cb && cb.Checked != value) cb.Checked = value;
+		}
     }
 }
