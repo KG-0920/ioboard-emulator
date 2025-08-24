@@ -12,10 +12,10 @@ echo === Restore ===
 dotnet restore "%SOLUTION%" || exit /b 1
 
 echo === Publish x64 ===
-dotnet publish "%PROJECT%" -c %CONF% -r win-x64 --self-contained false -o "%OUTDIR%\win-x64" || exit /b 1
+dotnet publish "%PROJECT%" -c %CONF% -r win-x64 --self-contained true -o "%OUTDIR%\win-x64" || exit /b 1
 
 echo === Publish x86 ===
-dotnet publish "%PROJECT%" -c %CONF% -r win-x86 --self-contained false -o "%OUTDIR%\win-x86" || exit /b 1
+dotnet publish "%PROJECT%" -c %CONF% -r win-x86 --self-contained true -o "%OUTDIR%\win-x86" || exit /b 1
 
 REM ルートの IoLogConfig.xml を同梱（無ければ雛形を生成）
 set LOGCFG=IoLogConfig.xml
@@ -26,6 +26,9 @@ if exist "%LOGCFG%" (
   echo ^<LogConfig^>^<Level^>Info^</Level^>^</LogConfig^> > "%OUTDIR%\win-x64\IoLogConfig.xml"
   echo ^<LogConfig^>^<Level^>Info^</Level^>^</LogConfig^> > "%OUTDIR%\win-x86\IoLogConfig.xml"
 )
+
+if exist "IoboardConfig.xml" copy /y "IoboardConfig.xml" "%OUTDIR%\win-x64\IoboardConfig.xml" >nul
+if exist "IoboardConfig.xml" copy /y "IoboardConfig.xml" "%OUTDIR%\win-x86\IoboardConfig.xml" >nul
 
 echo === Done ===
 echo Output: %OUTDIR%\win-x64, %OUTDIR%\win-x86
