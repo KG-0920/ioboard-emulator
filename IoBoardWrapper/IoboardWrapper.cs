@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.IO;
 
 namespace IoBoardWrapper
 {
@@ -14,6 +15,40 @@ namespace IoBoardWrapper
 #else
         private const string DllName = "fbidio.dll";          // Real device DLL (assumed same exports)
 #endif
+		static IoboardWrapper()
+		{
+#if DEBUG
+		    try
+		    {
+		        // exe のディレクトリ → その 1つ上
+		        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+		        var parentDir = Path.GetFullPath(Path.Combine(exeDir, ".."));
+
+		        // Debug では「親フォルダに IoboardEmulator.dll を置く」運用
+		        // 親に DLL があれば、プロセスの PATH の先頭に親フォルダを追加
+		        const string EmulatorDll = "IoboardEmulator.dll";
+		        if (File.Exists(Path.Combine(parentDir, EmulatorDll)))
+		        {
+		            var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+		            var segments = currentPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+		            bool already = false;
+		            foreach (var s in segments)
+		            {
+		                if (string.Equals(s, parentDir, StringComparison.OrdinalIgnoreCase)) { already = true; break; }
+		            }
+		            if (!already)
+		            {
+		                Environment.SetEnvironmentVariable("PATH", parentDir + Path.PathSeparator + currentPath);
+		            }
+		        }
+		        // 無ければ従来の検索順（exe直下など）にフォールバック
+		    }
+		    catch
+		    {
+		        // 失敗しても既定の検索順に任せる（動作は変えない）
+		    }
+#endif
+		}
 
         // --- Native bindings ---
         [DllImport(DllName, EntryPoint = "DioOpen", CallingConvention = CallingConvention.StdCall)]
