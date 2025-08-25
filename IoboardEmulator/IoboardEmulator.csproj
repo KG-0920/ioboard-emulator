@@ -2,15 +2,21 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <OutputType>Library</OutputType>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- AOT: ネイティブ共有ライブラリ化 -->
     <PublishAot>true</PublishAot>
-    <TrimMode>partial</TrimMode>
-    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <NativeLib>Shared</NativeLib>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+    <!-- 最適化（必要最低限） -->
+    <StripSymbols>true</StripSymbols>
+    <Optimize>true</Optimize>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>

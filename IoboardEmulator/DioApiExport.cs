@@ -1,39 +1,51 @@
-using System;
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace IoboardEmulator
 {
-    public static unsafe class DioApiExport
+    public static class DioApiExport
     {
-        // Open
+        private static readonly object _lock = new();
+        private static int _isOpen;
+        private static readonly byte[] Inputs  = new byte[256];
+        private static readonly byte[] Outputs = new byte[256];
+
         [UnmanagedCallersOnly(EntryPoint = "DioOpen", CallConvs = new[] { typeof(CallConvStdcall) })]
         public static int DioOpen(int rotarySwitchNo)
         {
-            Console.WriteLine($"[Native] DioOpen called with rotarySwitchNo = {rotarySwitchNo}");
-            return 1; // 成功
+            lock (_lock) _isOpen = 1;
+            return 1;
         }
 
-        // Close
         [UnmanagedCallersOnly(EntryPoint = "DioClose", CallConvs = new[] { typeof(CallConvStdcall) })]
         public static void DioClose(int rotarySwitchNo)
         {
-            Console.WriteLine($"[Native] DioClose called with rotarySwitchNo = {rotarySwitchNo}");
+            lock (_lock) _isOpen = 0;
         }
 
-        // WriteOutput
         [UnmanagedCallersOnly(EntryPoint = "DioWriteOutput", CallConvs = new[] { typeof(CallConvStdcall) })]
-        public static void DioWriteOutput(int rotarySwitchNo, int port, bool value)
+        public static int DioWriteOutput(int rotarySwitchNo, int port, int value)
         {
-            Console.WriteLine($"[Native] DioWriteOutput: RSW={rotarySwitchNo}, Port={port}, Value={value}");
+            if (_isOpen == 0) return 0;
+            if ((uint)port >= 256) return 0;
+            lock (_lock) Outputs[port] = (byte)(value != 0 ? 1 : 0);
+            return 1;
         }
 
-        // ReadInput
         [UnmanagedCallersOnly(EntryPoint = "DioReadInput", CallConvs = new[] { typeof(CallConvStdcall) })]
-        public static bool DioReadInput(int rotarySwitchNo, int port)
+        public static int DioReadInput(int rotarySwitchNo, int port)
         {
-            Console.WriteLine($"[Native] DioReadInput: RSW={rotarySwitchNo}, Port={port}");
-            return true; // 仮で常に ON
+            if (_isOpen == 0) return 0;
+            if ((uint)port >= 256) return 0;
+            lock (_lock) return Inputs[port];
+        }
+
+        // テスト用：入力を外部から刺す
+        [UnmanagedCallersOnly(EntryPoint = "Emu_SetInput", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static void Emu_SetInput(int port, int value)
+        {
+            if ((uint)port >= 256) return;
+            lock (_lock) Inputs[port] = (byte)(value != 0 ? 1 : 0);
         }
     }
 }
