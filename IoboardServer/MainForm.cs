@@ -8,52 +8,18 @@ namespace IoboardServer
 {
     public partial class MainForm : Form
     {
-        private TableLayoutPanel inputTable;
-        private TableLayoutPanel outputTable;
-        private TextBox logTextBox;
     	private IoboardConfig? _config;   // ★追加（必要なら）
 
 		public MainForm()
 		{
 		    InitializeComponent();
-		    InitializeCustomComponents();
 
-			var board = ResolveBoardFromConfig();                                         // ★追加
-			InitIoTables(board?.InputPorts?.Count ?? 16, board?.OutputPorts?.Count ?? 16); // ★追加
-        }
+			// 動的UI（左右=Input/Output・下=Log）を先に構築
+			BuildServerLayout();
 
-        private void InitializeCustomComponents()
-        {
-            this.Text = "Ioboard Monitor";
-            this.ClientSize = new Size(800, 600);
-
-            var mainLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3,
-                AutoSize = true
-            };
-
-            inputTable = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-            outputTable = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-            logTextBox = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-
-            var inputGroup = new GroupBox { Text = "Input Ports", Dock = DockStyle.Fill };
-            inputGroup.Controls.Add(inputTable);
-
-            var outputGroup = new GroupBox { Text = "Output Ports", Dock = DockStyle.Fill };
-            outputGroup.Controls.Add(outputTable);
-
-            var logGroup = new GroupBox { Text = "Log", Dock = DockStyle.Fill };
-            logGroup.Controls.Add(logTextBox);
-
-            mainLayout.Controls.Add(inputGroup);
-            mainLayout.Controls.Add(outputGroup);
-            mainLayout.Controls.Add(logGroup);
-
-            this.Controls.Add(mainLayout);
-        }
+			var board = ResolveBoardFromConfig();
+			BuildServerUi(board);                 // ★追加：UIを構成
+		}
 
         public void SetPortStates(bool[] inputStates, bool[] outputStates, string[] inputNames, string[] outputNames)
         {
@@ -87,17 +53,6 @@ namespace IoboardServer
             }
         }
 
-        public void AppendLog(string message)
-        {
-            if (logTextBox.InvokeRequired)
-            {
-                logTextBox.Invoke(new Action(() => AppendLog(message)));
-            }
-            else
-            {
-                logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
-            }
-        }
 		// ★追記：Config からボードを一つ選ぶ（最初の1件 or Rotary指定に一致）
 		private IoboardConfig.BoardInfo? ResolveBoardFromConfig()
 		{

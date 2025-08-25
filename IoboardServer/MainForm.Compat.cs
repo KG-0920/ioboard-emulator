@@ -1,6 +1,7 @@
 // IoboardServer/MainForm.Compat.cs
 using System;
 using System.Windows.Forms;
+using IoboardConfig = SharedConfig.IoboardConfig;  // ★追加
 
 namespace IoboardServer
 {
@@ -30,71 +31,11 @@ namespace IoboardServer
 		    this.SafeInvoke(() =>
 		    {
 		        EnsureTlpShape(inputTable, port + 1, 2);
-		        EnsureInputRow(port);       // ★行が無ければ作る（CheckBox含む）
-		        SetInputValue(port, value); // ★CheckBoxへ反映
+		        EnsureInputCheckboxRow(port);
+		        var ctrl = inputTable.GetControlFromPosition(1, port);
+		        if (ctrl is CheckBox cb && cb.Checked != value) cb.Checked = value;
 		    });
 		}
-
-        /// <summary>
-        /// TableLayoutPanel の行/列を必要数まで拡張（不足セルには Label を自動配置）
-        /// </summary>
-        private static void EnsureTlpShape(TableLayoutPanel tlp, int minRows, int minColumns)
-        {
-            // 列数を確保
-            while (tlp.ColumnCount < minColumns)
-            {
-                tlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / Math.Max(1, minColumns)));
-                tlp.ColumnCount++;
-            }
-
-            // 行数を確保
-            while (tlp.RowCount < minRows)
-            {
-                tlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                tlp.RowCount++;
-            }
-
-            // GrowStyle は行追加優先に
-            tlp.GrowStyle = TableLayoutPanelGrowStyle.AddRows;
-
-            // 足りないセルに Label を配置（null のセルだけ）
-            for (int r = 0; r < tlp.RowCount; r++)
-            {
-                for (int c = 0; c < tlp.ColumnCount; c++)
-                {
-                    if (tlp.GetControlFromPosition(c, r) is null)
-                    {
-                        var lbl = new Label
-                        {
-                            AutoSize = true,
-                            Text = string.Empty,
-                            Margin = new Padding(2),
-                            Anchor = AnchorStyles.Left
-                        };
-                        tlp.Controls.Add(lbl, c, r);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 指定セル（row, col）の Label にテキストを設定
-        /// </summary>
-        private static void SetTlpCellText(TableLayoutPanel tlp, int row, int col, string text)
-        {
-            var ctrl = tlp.GetControlFromPosition(col, row);
-            if (ctrl is Label lbl)
-            {
-                lbl.Text = text;
-            }
-            else if (ctrl is null)
-            {
-                // 念のためセルが空なら作って入れる
-                var newLbl = new Label { AutoSize = true, Text = text, Margin = new Padding(2), Anchor = AnchorStyles.Left };
-                tlp.Controls.Add(newLbl, col, row);
-            }
-            // それ以外のコントロールなら何もしない（設計に従う）
-        }
 
     	private void InitIoTables(int inputCount, int outputCount)
 		{
@@ -102,7 +43,7 @@ namespace IoboardServer
 		    {
 		        EnsureTlpShape(inputTable,  inputCount,  2);
 		        EnsureTlpShape(outputTable, outputCount, 2);
-		        for (int r = 0; r < inputCount;  r++) EnsureInputRow(r);
+		        for (int r = 0; r < inputCount;  r++) EnsureInputCheckboxRow(r);
 		        for (int r = 0; r < outputCount; r++)
 		        {
 		            SetTlpCellText(outputTable, r, 0, r.ToString());
@@ -111,27 +52,47 @@ namespace IoboardServer
 		    });
 		}
 
-		private void EnsureInputRow(int row)
-		{
-		    SetTlpCellText(inputTable, row, 0, row.ToString());
-		    var ctrl = inputTable.GetControlFromPosition(1, row);
-		    if (ctrl is not CheckBox cb)
-		    {
-		        cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left };
-		        cb.CheckedChanged += (s, e) =>
-		        {
-		            // ★サーバ側擬似入力の変更を反映（必要ならクライアントにも配信）
-		            AppendLog($"[Sim] Input {row} = {cb.Checked}");
-		            // TODO: PipeBroadcastInput(row, cb.Checked);
-		        };
-		        inputTable.Controls.Add(cb, 1, row);
-		    }
-		}
-
 		private void SetInputValue(int row, bool value)
 		{
 		    var ctrl = inputTable.GetControlFromPosition(1, row);
 		    if (ctrl is CheckBox cb && cb.Checked != value) cb.Checked = value;
+		}
+
+    	private void BuildServerUi(SharedConfig.IoboardConfig.BoardInfo? board)
+		{
+		    int inN  = board?.InputCount  ?? 16;
+		    int outN = board?.OutputCount ?? 16;
+
+		    this.SafeInvoke(() =>
+		    {
+		        SuspendLayout();
+
+		        // Table の形だけ確保（空セルに何も置かない）
+		        EnsureTlpShape(inputTable!,  inN,  2);
+		        EnsureTlpShape(outputTable!, outN, 2);
+
+		        // 既存をクリアしてから再構成
+		        inputTable!.Controls.Clear();
+		        outputTable!.Controls.Clear();
+
+		        // 出力：左=名称Label、右=状態Label
+		        for (int r = 0; r < outN; r++)
+		        {
+		            SetTlpCellText(outputTable!, r, 0, board?.GetOutputName(r) ?? $"OUT{r}");
+		            SetTlpCellText(outputTable!, r, 1, "OFF");
+		        }
+
+		        // 入力：左=名称Label、右=CheckBox
+		        for (int r = 0; r < inN; r++)
+		        {
+		            SetTlpCellText(inputTable!, r, 0, board?.GetInputName(r) ?? $"IN{r}");
+		            EnsureInputCheckboxRow(r);   // 2列目に CheckBox を保証（DynamicLayout側のユーティリティ）
+		        }
+
+		        ResumeLayout();
+
+		        AppendLog($"[UI] initialized. Inputs={inN}, Outputs={outN}");
+		    });
 		}
     }
 }
