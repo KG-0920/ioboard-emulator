@@ -2,113 +2,72 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace IoboardServer   // ← 既存の名前空間に合わせてください
+namespace IoboardServer
 {
     public partial class MainForm : Form
     {
-        // 動的UIの実体（Designerに置かない）
+        // 動的UI
         private TableLayoutPanel? inputTable;
         private TableLayoutPanel? outputTable;
         private TextBox? logTextBox;
 
-        /// <summary>
-        /// 上段＝左右に Input/Output、下段＝Log の3分割レイアウトを動的に構築
-        /// </summary>
+        // ラベル着色の配色
+        private static readonly Color LabelOnBack  = Color.LimeGreen;
+        private static readonly Color LabelOnFore  = Color.White;
+        private static readonly Color LabelOffBack = Color.DimGray;
+        private static readonly Color LabelOffFore = SystemColors.ControlLightLight;
+
+        /// <summary>上段=左右(入力/出力), 下段=Log の3分割レイアウトを構築</summary>
         private void BuildServerLayout()
         {
-            // 既に構築済みならスキップ
             if (inputTable != null && outputTable != null && logTextBox != null) return;
 
             this.SafeInvoke(() =>
             {
                 SuspendLayout();
 
-                // ルート（上下2段）
-                var root = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    RowCount = 2,
-                    ColumnCount = 1
-                };
-                root.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); // 上段：Input/Output
-                root.RowStyles.Add(new RowStyle(SizeType.Percent, 45)); // 下段：Log
+                var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
                 Controls.Add(root);
 
-                // 上段を左右2列に
-                var duo = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    RowCount = 1,
-                    ColumnCount = 2
-                };
+                var duo = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2 };
                 duo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 duo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 root.Controls.Add(duo, 0, 0);
 
-                // ===== 左：Input Group =====
-                var gbInput = new GroupBox
-                {
-                    Dock = DockStyle.Fill,
-                    Text = "Input Ports",
-                    Padding = new Padding(6)
-                };
+                // ===== 左：Input (CheckBox) =====
+                var gbInput = new GroupBox { Dock = DockStyle.Fill, Text = "Input Ports", Padding = new Padding(6) };
                 duo.Controls.Add(gbInput, 0, 0);
 
-                inputTable = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    AutoScroll = true,
-                    ColumnCount = 2,
-                    Margin = new Padding(0)
-                };
-                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+                inputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Margin = new Padding(0) };
                 inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
                 gbInput.Controls.Add(inputTable);
 
-                // ===== 右：Output Group =====
-                var gbOutput = new GroupBox
-                {
-                    Dock = DockStyle.Fill,
-                    Text = "Output Ports",
-                    Padding = new Padding(6)
-                };
+                // ===== 右：Output (ラベル自体を着色) =====
+                var gbOutput = new GroupBox { Dock = DockStyle.Fill, Text = "Output Ports", Padding = new Padding(6) };
                 duo.Controls.Add(gbOutput, 1, 0);
 
-                outputTable = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    AutoScroll = true,
-                    ColumnCount = 2,
-                    Margin = new Padding(0)
-                };
-                outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
-                outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+                outputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Margin = new Padding(0) };
+                // 列0＝ラベル本体（広め）、列1＝ダミー（互換用・狭め）
+                outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 98));
+                outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 2));
                 gbOutput.Controls.Add(outputTable);
 
-                // ===== 下段：Log Group =====
-                var gbLog = new GroupBox
-                {
-                    Dock = DockStyle.Fill,
-                    Text = "Log",
-                    Padding = new Padding(6)
-                };
+                // ===== 下段：Log =====
+                var gbLog = new GroupBox { Dock = DockStyle.Fill, Text = "Log", Padding = new Padding(6) };
                 root.Controls.Add(gbLog, 0, 1);
 
-                logTextBox = new TextBox
-                {
-                    Dock = DockStyle.Fill,
-                    Multiline = true,
-                    ReadOnly = true,
-                    ScrollBars = ScrollBars.Vertical
-                };
+                logTextBox = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
                 gbLog.Controls.Add(logTextBox);
 
                 ResumeLayout();
             });
         }
 
-        // ============ 既存ユーティリティが無い場合だけ（重複してたら省略可） ============
-        // 行列だけ確保（空セルには何も置かない）
+        // ====== ユーティリティ ======
+
         private static void EnsureTlpShape(TableLayoutPanel tlp, int minRows, int minColumns)
         {
             while (tlp.ColumnCount < minColumns)
@@ -118,48 +77,105 @@ namespace IoboardServer   // ← 既存の名前空間に合わせてくださ�
             }
             while (tlp.RowCount < minRows)
             {
-                tlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                tlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); // 行を詰めて高さを抑える
                 tlp.RowCount++;
             }
             tlp.GrowStyle = TableLayoutPanelGrowStyle.AddRows;
         }
 
-        // 指定セルに Label を置き（既存が Label 以外なら外して）テキスト設定
-        private static void SetTlpCellText(TableLayoutPanel tlp, int row, int col, string text)
+        private static Label EnsureLabelCell(TableLayoutPanel tlp, int row, int col, string text)
         {
             var ctrl = tlp.GetControlFromPosition(col, row);
-            if (ctrl is Label lbl)
+            if (ctrl is not Label lb)
             {
-                lbl.Text = text;
-                return;
+                if (ctrl != null) tlp.Controls.Remove(ctrl);
+                lb = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Margin = new Padding(2),
+                    Padding = new Padding(6, 2, 6, 2)
+                };
+                tlp.Controls.Add(lb, col, row);
             }
-            if (ctrl != null) tlp.Controls.Remove(ctrl);
-
-            var newLbl = new Label
-            {
-                AutoSize = true,
-                Text = text,
-                Margin = new Padding(2),
-                Anchor = AnchorStyles.Left
-            };
-            tlp.Controls.Add(newLbl, col, row);
+            lb.Text = text;
+            return lb;
         }
 
-        // 入力2列目に CheckBox を保障（既存が他なら外す）
-        private void EnsureInputCheckboxRow(int row)
+        private static void ColorizeLabel(Label lb, bool on)
         {
+            lb.BackColor = on ? LabelOnBack : LabelOffBack;
+            lb.ForeColor = on ? LabelOnFore : LabelOffFore;
+        }
+
+        // 入力：CheckBox行（2引数版）
+        private void EnsureInputCheckboxRow(int row, string name)
+        {
+            EnsureTlpShape(inputTable!, row + 1, 2);
+            EnsureLabelCell(inputTable!, row, 0, name);
+
             var ctrl = inputTable!.GetControlFromPosition(1, row);
             if (ctrl is CheckBox) return;
-            if (ctrl != null) inputTable!.Controls.Remove(ctrl);
+            if (ctrl != null) inputTable.Controls.Remove(ctrl);
 
+            int port = row;
             var cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left };
             cb.CheckedChanged += (s, e) =>
             {
-                AppendLog($"[Sim] Input {row} = {cb.Checked}");
-                // ★ここで NamedPipe ブロードキャスト（Emulator.dll へ INPUT 通知）
-                _pipe?.BroadcastInput(row, cb.Checked ? 1 : 0);
+                AppendLog($"[Sim] Input {port} = {cb.Checked}");
+                _pipe?.BroadcastInput(port, cb.Checked ? 1 : 0);
             };
-            inputTable!.Controls.Add(cb, 1, row);
+            inputTable.Controls.Add(cb, 1, row);
+        }
+
+        // 入力：互換（1引数）版
+        private void EnsureInputCheckboxRow(int row)
+        {
+            EnsureTlpShape(inputTable!, row + 1, 2);
+
+            var ctrl = inputTable!.GetControlFromPosition(1, row);
+            if (ctrl is CheckBox) return;
+            if (ctrl != null) inputTable.Controls.Remove(ctrl);
+
+            int port = row;
+            var cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left };
+            cb.CheckedChanged += (s, e) =>
+            {
+                AppendLog($"[Sim] Input {port} = {cb.Checked}");
+                _pipe?.BroadcastInput(port, cb.Checked ? 1 : 0);
+            };
+            inputTable.Controls.Add(cb, 1, row);
+        }
+
+        // 出力：行（名前ラベルだけ。色でON/OFFを表現）
+        private void EnsureOutputLampRow(int row, string name)
+        {
+            EnsureTlpShape(outputTable!, row + 1, 2);
+            var lb = EnsureLabelCell(outputTable!, row, 0, name);
+            // 既定は OFF 配色
+            ColorizeLabel(lb, on: false);
+        }
+
+        /// <summary>
+        /// 共通ラッパ：従来の "ON/OFF" テキスト更新をラベル着色にマップ
+        /// ・outputTable の (row, col==1) に "ON"/"OFF" が来た → 列0のラベル色を切替
+        /// ・それ以外は通常のラベル更新
+        /// </summary>
+        private void SetTlpCellText(TableLayoutPanel tlp, int row, int col, string text)
+        {
+            bool isOnOff = text.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+                           text.Equals("OFF", StringComparison.OrdinalIgnoreCase);
+
+            if (tlp == outputTable && col == 1 && isOnOff)
+            {
+                var lb = EnsureLabelCell(outputTable!, row, 0, outputTable!.GetControlFromPosition(0, row) is Label l ? l.Text : $"OUT{row}");
+                ColorizeLabel(lb, on: text.Equals("ON", StringComparison.OrdinalIgnoreCase));
+                return;
+            }
+
+            // 通常のラベル更新
+            EnsureLabelCell(tlp, row, col, text);
         }
 
         // スレッド安全 Invoke
@@ -169,7 +185,7 @@ namespace IoboardServer   // ← 既存の名前空間に合わせてくださ�
             else action();
         }
 
-        // ログ出力（logTextBox が動的生成なのでここに持たせると便利）
+        // ログ追加
         private void AppendLog(string message)
         {
             if (logTextBox == null) return;
