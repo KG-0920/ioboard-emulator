@@ -156,7 +156,8 @@ namespace IoboardServer   // ← 既存の名前空間に合わせてくださ�
             cb.CheckedChanged += (s, e) =>
             {
                 AppendLog($"[Sim] Input {row} = {cb.Checked}");
-                // TODO: サーバ→クライアント通知が必要ならここでBroadcast
+                // ★ここで NamedPipe ブロードキャスト（Emulator.dll へ INPUT 通知）
+                _pipe?.BroadcastInput(row, cb.Checked ? 1 : 0);
             };
             inputTable!.Controls.Add(cb, 1, row);
         }

@@ -41,6 +41,8 @@ namespace APP_A
 
             bool success = _controller.Open(_rotarySwitchNo);
             AppendLog(success ? "Open 成功" : "Open 失敗");
+
+        	AfterUiInitialized_StartPolling();
         }
 
         private void MainForm_FormClosed(object? sender, FormClosedEventArgs e)

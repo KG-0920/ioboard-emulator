@@ -9,6 +9,7 @@ namespace IoboardServer
     public partial class MainForm : Form
     {
     	private IoboardConfig? _config;   // ★追加（必要なら）
+		private IoboardServer.IPC.PipeHub? _pipe;
 
 		public MainForm()
 		{
@@ -19,6 +20,13 @@ namespace IoboardServer
 
 			var board = ResolveBoardFromConfig();
 			BuildServerUi(board);                 // ★追加：UIを構成
+
+			// Form_Load or ctor 後半
+			_pipe = new IoboardServer.IPC.PipeHub();
+			_pipe.OnLog += msg => AppendLog(msg);                         // 既存ログUIに流す
+			_pipe.OnWrite += (port, val) => this.SafeInvoke(() =>         // クライアント→Server：OUTPUT更新
+			    SetTlpCellText(outputTable, port, 1, val == 1 ? "ON" : "OFF"));
+			_pipe.Start();
 		}
 
         public void SetPortStates(bool[] inputStates, bool[] outputStates, string[] inputNames, string[] outputNames)
