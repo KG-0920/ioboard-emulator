@@ -12,7 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\IoBoardWrapper\*.cs" />
-    <Compile Include="..\..\SharedConfig\*.cs" />
+    <Compile Include="..\..\IoBoardWrapper\**\*.cs"
+             Link="IoBoardWrapper\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\SharedConfig\**\*.cs"
+             Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -1,26 +1,44 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>WinExe</OutputType>
     <Nullable>enable</Nullable>
-    <!-- AnyCPU ベース。RIDは publish 時に指定する運用 -->
-    <Platforms>AnyCPU</Platforms>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <SelfContained>true</SelfContained>
+
+    <!-- 発行: 単一EXE / 自己完結 / x64 固定 -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
+    <UseAppHost>true</UseAppHost>
+
+    <!-- 任意の品質オプション -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <StripSymbols>true</StripSymbols>
+    <PublishTrimmed>false</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
-  <!-- 共通プロジェクト参照 -->
+  <!-- Common は従来どおり参照 -->
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
-  <!-- SharedConfig は“共通ディレクトリ”をリンク取り込み（再帰） -->
+  <!-- ★ SharedConfig を“ソース取り込み”でリンク -->
   <ItemGroup>
     <Compile Include="..\SharedConfig\**\*.cs"
              Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- 設定ファイルを発行先に同梱 -->
+  <ItemGroup>
+    <Content Include="..\IoLogConfig.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\IoboardConfig.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 </Project>
