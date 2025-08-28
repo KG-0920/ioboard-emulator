@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using SharedConfig;
 
 namespace IoboardServer
 {
@@ -14,7 +15,7 @@ namespace IoboardServer
         [STAThread]
         static void Main(string[] args)
         {
-            bool suppressKill = args?.Any(a => string.Equals(a, NoKillArg, StringComparison.OrdinalIgnoreCase)) == true;
+            bool suppressKill = args.Any(a => string.Equals(a, NoKillArg, StringComparison.OrdinalIgnoreCase));
 
             using var mutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out bool createdNew);
             if (!createdNew)
@@ -32,7 +33,25 @@ namespace IoboardServer
             }
 
             ApplicationConfiguration.Initialize();
-            Application.Run(new MainForm()); // ← ここを MainForm に統一
+
+            // ✅ ConfigLocator はメソッド。IoboardConfig.xml のフルパスを取得してから Load します。
+            var xmlPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");
+            var cfg = IoboardConfig.Load(xmlPath);
+
+            // Board ごとにフォームを生成し、InitializeForBoard を1行だけ呼ぶ（A案）
+            var forms = cfg.Boards.Select(b =>
+            {
+                var f = new MainForm();
+                f.InitializeForBoard(b); // ← MainForm.BoardInit.cs で追加した受け口
+                return (Form)f;
+            }).ToList();
+
+            if (forms.Count == 0)
+            {
+                forms.Add(new MainForm());
+            }
+
+            Application.Run(new MultiBoardContext(forms));
         }
 
         private static void KillOtherInstances()

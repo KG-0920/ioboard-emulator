@@ -1,79 +1,154 @@
+using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace IoboardEmulator;
-
-public static class DioApiExport
+namespace IoboardEmulator
 {
-    private static readonly object _lock = new();
-
-    // ステート
-    private static int _isOpen;
-    private static readonly byte[] Inputs  = new byte[256];
-    private static readonly byte[] Outputs = new byte[256];
-
-    // Pipeクライアント（サーバは IoboardServer 側）
-    private static PipeClient? _pipe;
-    private static volatile bool _pipeStarted;
-
-    private static void EnsurePipeStarted()
+    public static class DioApiExport
     {
-        if (_pipeStarted) return;
-        lock (_lock)
+        private sealed class Session : IDisposable
         {
-            if (_pipeStarted) return;
-            _pipe = new PipeClient();
-            _pipe.OnInput += (port, val) =>
+            private readonly object _lock = new();
+            public readonly int Rsw;
+            public readonly PipeClient Pipe;
+            public readonly byte[] Inputs  = new byte[256];
+            public readonly byte[] Outputs = new byte[256];
+            public bool IsOpen;
+
+            public Session(int rsw)
             {
-                if ((uint)port < 256) lock (_lock) Inputs[port] = (byte)val;
-            };
-            _pipe.OnLog += msg => { /* 必要ならデバッグ出力 */ };
-            _pipe.Start();
-            _pipeStarted = true;
+                Rsw  = rsw;
+                Pipe = new PipeClient();
+                Pipe.OnInput += OnInputFromServer;
+                Pipe.OnLog   += msg => Common.Logger.Log(msg);
+            }
+
+            public void Open()
+            {
+                if (IsOpen) return;
+                Pipe.Start();
+                Pipe.SendHelloRsw(Rsw); // ★ 正規APIで握手
+                IsOpen = true;
+            }
+
+            public void Close()
+            {
+                if (!IsOpen) return;
+                try { Pipe.Dispose(); } catch { }
+                IsOpen = false;
+            }
+
+            public void WriteBit(int port, int val)
+            {
+                if (!IsOpen) return;
+                if ((uint)port >= 256) return;
+
+                lock (_lock) { Outputs[port] = (byte)(val != 0 ? 1 : 0); }
+                Pipe.SendWrite(port, val != 0 ? 1 : 0);
+            }
+
+            public int ReadBit(int port)
+            {
+                if (!IsOpen) return 0;
+                if ((uint)port >= 256) return 0;
+                lock (_lock) return Inputs[port];
+            }
+
+            private void OnInputFromServer(int port, int val)
+            {
+                if ((uint)port >= 256) return;
+                lock (_lock) Inputs[port] = (byte)(val != 0 ? 1 : 0);
+            }
+
+            public void Dispose() => Close();
         }
-    }
 
-    [UnmanagedCallersOnly(EntryPoint = "DioOpen", CallConvs = new[] { typeof(CallConvStdcall) })]
-    public static int DioOpen(int rotary)
-    {
-        EnsurePipeStarted();
-        lock (_lock) _isOpen = 1;
-        return 1;
-    }
+        private static readonly object _sync = new();
+        private static readonly Dictionary<int, Session> _sessions = new();
 
-    [UnmanagedCallersOnly(EntryPoint = "DioClose", CallConvs = new[] { typeof(CallConvStdcall) })]
-    public static void DioClose(int rotary)
-    {
-        lock (_lock) _isOpen = 0;
-        // Pipeは常駐でよい（アプリ終了時にプロセスごと閉じる）
-    }
+        private static Session GetOrCreate(int rsw)
+        {
+            lock (_sync)
+            {
+                if (!_sessions.TryGetValue(rsw, out var s))
+                {
+                    s = new Session(rsw);
+                    _sessions[rsw] = s;
+                }
+                return s;
+            }
+        }
 
-    [UnmanagedCallersOnly(EntryPoint = "DioWriteOutput", CallConvs = new[] { typeof(CallConvStdcall) })]
-    public static int DioWriteOutput(int rotary, int port, int value)
-    {
-        if (_isOpen == 0) return 0;
-        if ((uint)port >= 256) return 0;
+        [UnmanagedCallersOnly(EntryPoint = "DioOpen", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static int DioOpen(int rotarySwitchNo)
+        {
+            try
+            {
+                var s = GetOrCreate(rotarySwitchNo);
+                s.Open();
+                return 1;
+            }
+            catch { return 0; }
+        }
 
-        lock (_lock) Outputs[port] = (byte)(value != 0 ? 1 : 0);
+        [UnmanagedCallersOnly(EntryPoint = "DioClose", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static void DioClose(int rotarySwitchNo)
+        {
+            try
+            {
+                lock (_sync)
+                {
+                    if (_sessions.TryGetValue(rotarySwitchNo, out var s))
+                    {
+                        s.Close();
+                        _sessions.Remove(rotarySwitchNo);
+                    }
+                }
+            }
+            catch { }
+        }
 
-        // Serverへ「WRITE port val」を送信（UI更新用）
-        _pipe?.SendWrite(port, value != 0 ? 1 : 0);
-        return 1;
-    }
+        [UnmanagedCallersOnly(EntryPoint = "DioWriteOutput", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static int DioWriteOutput(int rotarySwitchNo, int port, int value)
+        {
+            try
+            {
+                var s = GetOrCreate(rotarySwitchNo);
+                s.Open();
+                s.WriteBit(port, value);
+                return 1;
+            }
+            catch { return 0; }
+        }
 
-    [UnmanagedCallersOnly(EntryPoint = "DioReadInput", CallConvs = new[] { typeof(CallConvStdcall) })]
-    public static int DioReadInput(int rotary, int port)
-    {
-        if (_isOpen == 0) return 0;
-        if ((uint)port >= 256) return 0;
-        lock (_lock) return Inputs[port];
-    }
+        [UnmanagedCallersOnly(EntryPoint = "DioReadInput", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static int DioReadInput(int rotarySwitchNo, int port)
+        {
+            try
+            {
+                var s = GetOrCreate(rotarySwitchNo);
+                s.Open();
+                return s.ReadBit(port);
+            }
+            catch { return 0; }
+        }
 
-    // テスト用：外部から入力を刺す
-    [UnmanagedCallersOnly(EntryPoint = "Emu_SetInput", CallConvs = new[] { typeof(CallConvStdcall) })]
-    public static void Emu_SetInput(int port, int value)
-    {
-        if ((uint)port >= 256) return;
-        lock (_lock) Inputs[port] = (byte)(value != 0 ? 1 : 0);
+        [UnmanagedCallersOnly(EntryPoint = "Emu_SetInput", CallConvs = new[] { typeof(CallConvStdcall) })]
+        public static void Emu_SetInput(int port, int value)
+        {
+            Session? target = null;
+            lock (_sync)
+            {
+                if (_sessions.TryGetValue(0, out var s)) target = s;
+                else if (_sessions.Count > 0) target = System.Linq.Enumerable.First(_sessions.Values);
+            }
+            if (target is null) return;
+            if ((uint)port >= 256) return;
+
+            typeof(Session)
+                .GetMethod("OnInputFromServer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?
+                .Invoke(target, new object[] { port, value != 0 ? 1 : 0 });
+        }
     }
 }

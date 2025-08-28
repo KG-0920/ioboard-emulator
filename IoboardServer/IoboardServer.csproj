@@ -6,31 +6,28 @@
     <OutputType>WinExe</OutputType>
     <Nullable>enable</Nullable>
 
-    <!-- 発行: 単一EXE / 自己完結 / x64 固定 -->
+    <!-- 発行設定（必要に応じて調整） -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <UseAppHost>true</UseAppHost>
 
-    <!-- 任意の品質オプション -->
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <StripSymbols>true</StripSymbols>
-    <PublishTrimmed>false</PublishTrimmed>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
-  <!-- Common は従来どおり参照 -->
+  <!-- 参照 -->
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
-  <!-- ★ SharedConfig を“ソース取り込み”でリンク -->
+  <!-- SharedConfig をリンクとして取り込み -->
   <ItemGroup>
     <Compile Include="..\SharedConfig\**\*.cs"
              Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <!-- 設定ファイルを発行先に同梱 -->
+  <!-- 設定ファイルを同梱 -->
   <ItemGroup>
     <Content Include="..\IoLogConfig.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -40,5 +37,25 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
+  </ItemGroup>
+
+  <!-- ★ RESX 衝突対策：既定の自動取り込みを外す -->
+  <ItemGroup>
+    <EmbeddedResource Remove="**\*.resx" />
+  </ItemGroup>
+
+  <!-- ★ 必要な RESX を明示登録し、ManifestResourceName を固定 -->
+  <ItemGroup>
+    <!-- MainForm.resx → obj\...\IoboardServer.MainForm.resources -->
+    <EmbeddedResource Include="MainForm.resx">
+      <ManifestResourceName>$(RootNamespace).MainForm</ManifestResourceName>
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+
+    <!-- MainForm.DynamicLayout.resx → obj\...\IoboardServer.MainForm.DynamicLayout.resources -->
+    <EmbeddedResource Include="MainForm.DynamicLayout.resx">
+      <ManifestResourceName>$(RootNamespace).MainForm.DynamicLayout</ManifestResourceName>
+      <DependentUpon>MainForm.DynamicLayout.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>
