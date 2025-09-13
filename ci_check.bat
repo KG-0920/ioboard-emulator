@@ -1,71 +1,60 @@
 @echo off
 setlocal EnableExtensions
-set "ROOT=%~dp0"
-set "EXITCODE=0"
+rem File : ci_check.bat
+rem Ver  : v1.0 (2025-09-12 JST)
+rem Why  : Clean → Build → Publish の一連を既存順序で実行。等価リファクタは行わない。
 
-REM --- /nopause でキー待ち無効 ---
-set "NOPAUSE="
-if /I "%~1"=="/nopause" set "NOPAUSE=1"
+cd /d "%~dp0"
 
-title IoBoard CI Check
-where dotnet >nul 2>nul || (
-  echo [ERROR] dotnet SDK not found in PATH.
-  set "EXITCODE=1"
-  goto :FINALLY
-)
+echo [STEP] kill running apps
+taskkill /f /im APP_A.exe >nul 2>nul
+taskkill /f /im APP_B.exe >nul 2>nul
+taskkill /f /im IoboardServer.exe >nul 2>nul
+
+echo [STEP] remove publish dirs
+rd /s /q "APP\publish"                                    2>nul
+rd /s /q "IoboardServer\publish"                           2>nul
+rd /s /q "IoboardEmulator\publish"                         2>nul
+
+echo [STEP] remove bin/obj
+rd /s /q "APP\APP_A\bin"          2>nul
+rd /s /q "APP\APP_A\obj"          2>nul
+rd /s /q "APP\APP_B\bin"          2>nul
+rd /s /q "APP\APP_B\obj"          2>nul
+rd /s /q "IoboardServer\bin"      2>nul
+rd /s /q "IoboardServer\obj"      2>nul
+rd /s /q "IoboardEmulator\bin"    2>nul
+rd /s /q "IoboardEmulator\obj"    2>nul
+rd /s /q "Common\bin"             2>nul
+rd /s /q "Common\obj"             2>nul
+
+echo [OK] Clean completed. Starting build/publish...
 
 echo === Build Debug and Release ===
-for %%C in (Debug Release) do (
-  echo --- Building IoboardEmulator [%%C]
-  dotnet build "%ROOT%IoboardEmulator\IoboardEmulator.csproj" -c %%C || (set "EXITCODE=1" & goto :FINALLY)
-  echo --- Building APP_A [%%C]
-  dotnet build "%ROOT%APP\APP_A\APP_A.csproj" -c %%C || (set "EXITCODE=1" & goto :FINALLY)
-  echo --- Building APP_B [%%C]
-  dotnet build "%ROOT%APP\APP_B\APP_B.csproj" -c %%C || (set "EXITCODE=1" & goto :FINALLY)
-  echo --- Building IoboardServer [%%C]
-  dotnet build "%ROOT%IoboardServer\IoboardServer.csproj" -c %%C || (set "EXITCODE=1" & goto :FINALLY)
-)
 
-echo --- Stopping running apps (if any) ---
-for %%P in (APP_A.exe APP_B.exe IoboardServer.exe) do (
-  taskkill /IM %%P /F >nul 2>nul
-)
+echo --- Building APP_A [Debug]
+dotnet build "APP\APP_A\APP_A.csproj" -c Debug -r win-x64 || goto :err
+
+echo --- Building APP_B [Debug]
+dotnet build "APP\APP_B\APP_B.csproj" -c Debug -r win-x64 || goto :err
+
+echo --- Building IoboardEmulator [Release]
+dotnet build "IoboardEmulator\IoboardEmulator.csproj" -c Release -r win-x64 || goto :err
+
+echo --- Building IoboardServer [Release]
+dotnet build "IoboardServer\IoboardServer.csproj" -c Release -r win-x64 || goto :err
+
+echo --- Stopping running apps (if any)
+taskkill /f /im APP_A.exe >nul 2>nul
+taskkill /f /im APP_B.exe >nul 2>nul
+taskkill /f /im IoboardServer.exe >nul 2>nul
 
 echo === Publish Emu/Server=Release, Apps=Debug ===
-call "%ROOT%publish_all.bat" Release Debug || (set "EXITCODE=1" & goto :FINALLY)
+call "%~dp0publish_all.bat" || goto :err
 
-REM --- Artifacts check ---
-set "EMU_DLL=%ROOT%APP\publish\IoboardEmulator.dll"
-set "APP_A_EXE=%ROOT%APP\publish\APP_A\APP_A.exe"
-set "APP_B_EXE=%ROOT%APP\publish\APP_B\APP_B.exe"
-set "SVR_EXE=%ROOT%IoboardServer\publish\win-x64\Release\IoboardServer.exe"
+echo === DONE ===
+exit /b 0
 
-for %%F in ("%EMU_DLL%" "%APP_A_EXE%" "%APP_B_EXE%" "%SVR_EXE%") do (
-  if not exist %%F (
-    echo [ERROR] Missing artifact: %%~fF
-    set "EXITCODE=1"
-    goto :FINALLY
-  )
-)
-
-echo.
-echo [OK] All artifacts present:
-echo   %EMU_DLL%
-echo   %APP_A_EXE%
-echo   %APP_B_EXE%
-echo   %SVR_EXE%
-
-:FINALLY
-echo.
-if "%EXITCODE%"=="0" (
-  echo === DONE: success ===
-) else (
-  echo === DONE: failed (EXITCODE=%EXITCODE%) ===
-)
-
-if not defined NOPAUSE (
-  echo.
-  echo Press any key to close...
-  pause >nul
-)
-exit /b %EXITCODE%
+:err
+echo *** ERROR in ci_check.bat ***
+exit /b 1

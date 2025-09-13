@@ -53,7 +53,7 @@ namespace APP_B
         private void AppendLog(string message)
         {
             if (logTextBox == null) return;
-            logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss.fff}] {message}\r\n");
         }
     }
 }

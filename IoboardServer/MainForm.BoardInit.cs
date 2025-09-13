@@ -1,41 +1,49 @@
+// IoboardServer/MainForm.BoardInit.cs
 using System;
-using System.Windows.Forms;
-using SharedConfig;
-using IoboardConfigNS = SharedConfig.IoboardConfig;
+using IoboardServer.IPC;
+using IoboardConfig = SharedConfig.IoboardConfig;
 
 namespace IoboardServer
 {
-    public partial class MainForm : Form
+    public partial class MainForm
     {
-        private IoboardConfigNS.BoardInfo? _selectedBoard;
+        private IoboardConfig.BoardInfo? _selectedBoard;
 
-        public void InitializeForBoard(IoboardConfigNS.BoardInfo board)
+        /// <summary>
+        /// 【後方互換の公開入口】既存コードはこのメソッドを呼びます。
+        /// 実処理は BoardInit に委譲します。
+        /// </summary>
+        public void InitializeForBoard(IoboardConfig.BoardInfo board)
+            => BoardInit(board);
+
+        /// <summary>
+        /// 【実処理】ボードごとの初期化（タイトル、UI生成、ログ購読、WRITE購読）
+        /// </summary>
+        public void BoardInit(IoboardConfig.BoardInfo board)
         {
-            try
+            _selectedBoard = board;
+
+            // タイトル更新
+            this.SafeInvoke(() =>
             {
-                _selectedBoard = board;
+                Text = $"IoboardServer - RSW {board.RotarySwitchNo} ({board.DeviceName})";
+            });
 
-                // タイトル更新
-                this.Text = $"IoboardServer - RSW {board.RotarySwitchNo} ({board.DeviceName})";
+            // 画面を構築（名称貼り＋初期 OFF） - 既存のレイアウト/配色ロジックを使用
+            BuildServerUi(board);
 
-                // ★このボード定義でUI（ポート名）を確定
-                BuildServerUi(board);
+            var rsw = board.RotarySwitchNo;
 
-                // ★フィルタは即時に設定（Loadを待たない）
-                try { _pipe?.SetRswFilter(board.RotarySwitchNo); } catch { }
-
-                // （冗長だが念のため）Load時にも再設定しておく
-                this.Load += (_, __) =>
+            // RSW単位の購読: WRITE→出力表示更新、ログ→そのまま表示
+            PipeHub.Instance.Subscribe(
+                rsw,
+                onWrite: (rswNo, port, val) =>
                 {
-                    try { _pipe?.SetRswFilter(board.RotarySwitchNo); } catch { }
-                };
-            }
-            catch (Exception ex)
-            {
-                try { AppendLog($"[Init] InitializeForBoard error: {ex.Message}"); } catch { }
-            }
+                    if (rswNo != rsw) return; // 念のためフィルタ
+                    SafeInvoke(() => UpdateOutput(port, val != 0));
+                },
+                onLog: line => AppendLog(line)
+            );
         }
-
-        public IoboardConfigNS.BoardInfo? SelectedBoard => _selectedBoard;
     }
 }

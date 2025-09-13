@@ -1,211 +1,264 @@
+// IoboardServer/IPC/PipeHub.cs
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Common;
 
 namespace IoboardServer.IPC
 {
     /// <summary>
-    /// NamedPipe サーバ。
-    /// - 接続ごとにIDを付与
-    /// - クライアントから "HELLO_RSW n" を受け取り、その接続IDに RSW を紐付け
-    /// - "WRITE p v" を受けたら、RSWフィルタ（SetRswFilter）に一致する場合のみ既存OnWriteを発火
-    /// - "INPUT p v" を指定RSWのクライアントのみに送信
-    /// 既存互換：
-    ///   - OnWrite(port,val) は残します（RSWフィルタ未設定時は従来どおり全てで発火）
-    ///   - BroadcastInput(port,val) も残し、RSWフィルタが設定されている場合はそのRSWにのみ送信
-    /// 拡張：
-    ///   - OnWriteRsw(rsw,port,val) を追加（必要なら将来利用）
+    /// NamedPipe のハブ。
+    /// - RSW(ロータリSW番号)ごとに複数クライアントを受け付け
+    /// - クライアント→サーバ: "WRITE <port> <val>" を受信し購読者へ通知
+    /// - サーバ→クライアント: "INPUT <port> <val>" を送信（BroadcastInput）
+    /// - 接続時に "HELLO_RSW <rsw>" をサーバ→クライアントへ送出
     /// </summary>
     public sealed class PipeHub : IDisposable
     {
-        private readonly ConcurrentDictionary<int, NamedPipeServerStream> _clients = new();
-        private readonly ConcurrentDictionary<int, int> _clientRsw = new(); // clientId -> rsw
-        private int _nextId;
-        private volatile bool _running;
+        public static PipeHub Instance { get; } = new PipeHub();
 
-        // この PipeHub インスタンスが担当する RSW（null なら全体）
-        private int? _rswFilter;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly ConcurrentDictionary<int, List<ClientConn>> _clients = new(); // rsw -> connections
+        private readonly ConcurrentDictionary<int, List<Action<int,int,int>>> _writeSubs = new(); // rsw -> handlers
+        private readonly ConcurrentDictionary<int, List<Action<string>>> _logSubs = new(); // rsw -> loggers
+        private int _nextId = 1;
 
-        // 既存互換イベント
-        public event Action<int, int>? OnWrite; // (port, val)
-        public event Action<string>? OnLog;
-
-        // 拡張イベント（必要なら購読）
-        public event Action<int, int, int>? OnWriteRsw; // (rsw, port, val)
-
-        public void SetRswFilter(int rsw) => _rswFilter = rsw;
-
-        public void Start()
+        // 既知のパイプ名（旧/新 どちらでも接続可にする）
+        private static readonly string[] PipeNamePatterns = new[]
         {
-            if (_running) return;
-            _running = true;
-            _ = Task.Run(AcceptLoop);
-        }
+            "IoboardEmu_RSW_{0}",        // 例: IoboardEmu_RSW_0
+            "IoboardEmulator_RSW{0}",    // 例: IoboardEmulator_RSW0
+            "ioboard_emulator_rsw{0}"    // 例: ioboard_emulator_rsw0
+        };
 
-        private async Task AcceptLoop()
+        private PipeHub()
         {
-            OnLog?.Invoke("[Pipe] AcceptLoop started");
-            while (_running)
-            {
-                var server = new NamedPipeServerStream(
-                    PipeConfig.PipeName,
-                    PipeDirection.InOut,
-                    NamedPipeServerStream.MaxAllowedServerInstances,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
-
-                try
-                {
-                    await server.WaitForConnectionAsync().ConfigureAwait(false);
-                }
-                catch
-                {
-                    try { server.Dispose(); } catch { }
-                    continue;
-                }
-
-                int id = Interlocked.Increment(ref _nextId);
-                _clients[id] = server;
-                OnLog?.Invoke($"[Pipe] accepted id={id}");
-
-                _ = Task.Run(() => ReadLoop(id, server));
-            }
-        }
-
-        private async Task ReadLoop(int id, NamedPipeServerStream s)
-        {
-            var buf = new byte[1024];
-            var sb = new StringBuilder();
-            try
-            {
-                while (_running && s.IsConnected)
-                {
-                    int n = await s.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false);
-                    if (n <= 0) break;
-                    sb.Append(Encoding.UTF8.GetString(buf, 0, n));
-
-                    while (true)
-                    {
-                        var txt = sb.ToString();
-                        int nl = txt.IndexOf('\n');
-                        if (nl < 0) break;
-
-                        var line = txt.Substring(0, nl).TrimEnd('\r');
-                        sb.Remove(0, nl + 1);
-
-                        HandleLine(id, line);
-                    }
-                }
-            }
-            catch (IOException) { /* disconnect */ }
-            catch (Exception ex)
-            {
-                OnLog?.Invoke($"[Pipe] error id={id} {ex.Message}");
-            }
-            finally
-            {
-                try { s.Dispose(); } catch { }
-                _clients.TryRemove(id, out _);
-                _clientRsw.TryRemove(id, out _);
-                OnLog?.Invoke($"[Pipe] closed id={id}");
-            }
-        }
-
-        private void HandleLine(int id, string line)
-        {
-            OnLog?.Invoke($"[<=Pipe] {line}");
-
-            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0) return;
-
-            var cmd = parts[0].ToUpperInvariant();
-            switch (cmd)
-            {
-                case "HELLO_RSW":
-                {
-                    if (parts.Length >= 2 && int.TryParse(parts[1], out var rsw))
-                    {
-                        _clientRsw[id] = rsw;
-                        OnLog?.Invoke($"[Pipe] id={id} mapped to RSW={rsw}");
-                    }
-                    return;
-                }
-
-                case "WRITE":
-                {
-                    if (parts.Length >= 3 &&
-                        int.TryParse(parts[1], out var port) &&
-                        int.TryParse(parts[2], out var val))
-                    {
-                        int rsw = _clientRsw.TryGetValue(id, out var r) ? r : 0;
-
-                        // 既存互換：RSWフィルタ未設定なら従来どおり全通知、設定済みなら一致時のみ
-                        if (_rswFilter is null || _rswFilter.Value == rsw)
-                        {
-                            OnWrite?.Invoke(port, val);
-                        }
-                        // 拡張イベント
-                        OnWriteRsw?.Invoke(rsw, port, val);
-                    }
-                    return;
-                }
-
-                default:
-                    // 予期しない行はログのみ
-                    return;
-            }
-        }
-
-        // ===== 送信 =====
-
-        /// <summary>
-        /// 既存互換：全クライアントへ（または RSWフィルタ設定時は該当RSWへ）INPUT を配信。
-        /// </summary>
-        public void BroadcastInput(int port, int val)
-        {
-            if (_rswFilter is int rsw)
-            {
-                SendInputToRsw(rsw, port, val);
-            }
-            else
-            {
-                SendToClients(_ => true, $"{PipeConfig.CmdInput} {port} {val}\n");
-            }
-        }
-
-        /// <summary>拡張：指定 RSW のみへ INPUT を配信。</summary>
-        public void BroadcastInput(int rsw, int port, int val) => SendInputToRsw(rsw, port, val);
-
-        private void SendInputToRsw(int rsw, int port, int val)
-        {
-            SendToClients(id => _clientRsw.TryGetValue(id, out var r) && r == rsw,
-                          $"{PipeConfig.CmdInput} {port} {val}\n");
-        }
-
-        private void SendToClients(Func<int, bool> predicate, string line)
-        {
-            var bytes = Encoding.UTF8.GetBytes(line);
-            foreach (var kv in _clients)
-            {
-                if (!predicate(kv.Key)) continue;
-                try { kv.Value.Write(bytes, 0, bytes.Length); kv.Value.Flush(); }
-                catch { /* ignore */ }
-            }
-            OnLog?.Invoke($"[Pipe=>] {line.Trim()}");
+            // ひとまず RSW=0/1 を待受（必要に応じて拡張可）
+            StartAcceptLoop(0);
+            StartAcceptLoop(1);
         }
 
         public void Dispose()
         {
-            _running = false;
-            foreach (var s in _clients.Values) { try { s.Dispose(); } catch { } }
-            _clients.Clear();
-            _clientRsw.Clear();
+            _cts.Cancel();
+            foreach (var list in _clients.Values)
+            {
+                foreach (var c in list.ToArray()) c.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// WRITE通知の購読登録。onLog は任意。
+        /// </summary>
+        public void Subscribe(int rsw, Action<int,int,int> onWrite, Action<string>? onLog = null)
+        {
+            _writeSubs.AddOrUpdate(rsw,
+                _ => new List<Action<int,int,int>> { onWrite },
+                (_, list) => { list.Add(onWrite); return list; });
+
+            if (onLog != null)
+            {
+                _logSubs.AddOrUpdate(rsw,
+                    _ => new List<Action<string>> { onLog },
+                    (_, list) => { list.Add(onLog); return list; });
+            }
+
+            Log(rsw, $"[Pipe] subscribed for RSW={rsw}");
+        }
+
+        /// <summary>
+        /// サーバ→クライアントへの入力配信
+        /// </summary>
+        public void BroadcastInput(int rsw, int port, int val)
+        {
+            if (_clients.TryGetValue(rsw, out var list))
+            {
+                var dead = new List<ClientConn>();
+                foreach (var c in list)
+                {
+                    try { c.SendLine($"INPUT {port} {val}"); }
+                    catch { dead.Add(c); }
+                }
+                if (dead.Count > 0)
+                {
+                    foreach (var d in dead) RemoveClient(rsw, d);
+                }
+            }
+            Log(rsw, $"[=>Pipe] INPUT {port} {val}");
+        }
+
+        private void StartAcceptLoop(int rsw)
+        {
+            // パイプ名の候補ごとに待受を立てる（null/空なら既定値へフォールバック）
+            var patterns = PipeNamePatterns;
+            if (patterns == null || patterns.Length == 0)
+            {
+                patterns = new[] { "IoboardEmu_RSW_{0}", "IoboardEmulator_RSW{0}", "ioboard_emulator_rsw{0}" };
+                Log(rsw, "[Pipe] WARN: PipeNamePatterns was null/empty. Using fallback defaults.");
+            }
+
+            foreach (var pattern in patterns)
+            {
+                var pipeName = string.Format(pattern, rsw);
+                Task.Run(async () =>
+                {
+                    Log(rsw, "[Pipe] AcceptLoop started");
+                    while (!_cts.IsCancellationRequested)
+                    {
+                        NamedPipeServerStream? server = null;
+                        try
+                        {
+                            server = new NamedPipeServerStream(
+                                pipeName,
+                                PipeDirection.InOut,
+                                254, // Max instances
+                                PipeTransmissionMode.Byte,
+                                PipeOptions.Asynchronous);
+
+                            await server.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
+
+                            var id = Interlocked.Increment(ref _nextId);
+                            var conn = new ClientConn(id, rsw, server, line => OnLine(rsw, line), ex => OnDisconnected(rsw, id, ex));
+                            AddClient(rsw, conn);
+                            Log(rsw, $"[Pipe] accepted id={id}");
+                            conn.SendLine($"HELLO_RSW {rsw}");
+                            Log(rsw, "[<=Pipe] HELLO_RSW " + rsw);
+                            _ = conn.ReadLoopAsync(_cts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            server?.Dispose();
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            server?.Dispose();
+                            Log(rsw, $"[Pipe] accept error: {ex.Message}");
+                            await Task.Delay(200).ConfigureAwait(false);
+                        }
+                    }
+                }, _cts.Token);
+            }
+        }
+
+        private void OnLine(int rsw, string line)
+        {
+            // WRITE <port> <val> だけ拾う（その他はログ）
+            if (string.IsNullOrWhiteSpace(line)) return;
+            var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length >= 3 && parts[0].Equals("WRITE", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(parts[1], out var port) && int.TryParse(parts[2], out var val))
+            {
+                Log(rsw, $"[<=Pipe] WRITE {port} {val}");
+                if (_writeSubs.TryGetValue(rsw, out var subs))
+                {
+                    foreach (var h in subs.ToArray())
+                    {
+                        try { h(rsw, port, val); } catch { /* ignore */ }
+                    }
+                }
+            }
+            else
+            {
+                Log(rsw, $"[<=Pipe] {line}");
+            }
+        }
+
+        private void AddClient(int rsw, ClientConn conn)
+        {
+            _clients.AddOrUpdate(rsw,
+                _ => new List<ClientConn> { conn },
+                (_, list) => { list.Add(conn); return list; });
+        }
+
+        private void RemoveClient(int rsw, ClientConn conn)
+        {
+            if (_clients.TryGetValue(rsw, out var list))
+            {
+                list.Remove(conn);
+                conn.Dispose();
+            }
+        }
+
+        private void OnDisconnected(int rsw, int id, Exception? ex)
+        {
+            Log(rsw, ex == null ? $"[Pipe] closed id={id}" : $"[Pipe] closed id={id} ({ex.Message})");
+            if (_clients.TryGetValue(rsw, out var list))
+            {
+                var dead = list.Where(c => c.Id == id).ToList();
+                foreach (var d in dead) RemoveClient(rsw, d);
+            }
+        }
+
+        private void Log(int rsw, string msg)
+        {
+            if (_logSubs.TryGetValue(rsw, out var logs))
+            {
+                var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
+                foreach (var l in logs.ToArray())
+                {
+                    try { l(line); } catch { /* ignore */ }
+                }
+            }
+        }
+
+        // 単一接続のラッパ
+        private sealed class ClientConn : IDisposable
+        {
+            public int Id { get; }
+            private readonly int _rsw;
+            private readonly NamedPipeServerStream _stream;
+            private readonly StreamReader _reader;
+            private readonly StreamWriter _writer;
+            private readonly Action<string> _onLine;
+            private readonly Action<Exception?> _onClose;
+
+            public ClientConn(int id, int rsw, NamedPipeServerStream stream, Action<string> onLine, Action<Exception?> onClose)
+            {
+                Id = id;
+                _rsw = rsw;
+                _stream = stream;
+                _reader = new StreamReader(stream, Encoding.UTF8);
+                _writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+                _onLine = onLine;
+                _onClose = onClose;
+            }
+
+            public async Task ReadLoopAsync(CancellationToken token)
+            {
+                try
+                {
+                    while (!token.IsCancellationRequested && _stream.IsConnected)
+                    {
+                        var line = await _reader.ReadLineAsync().ConfigureAwait(false);
+                        if (line == null) break;
+                        _onLine(line);
+                    }
+                    _onClose(null);
+                }
+                catch (Exception ex)
+                {
+                    _onClose(ex);
+                }
+            }
+
+            public void SendLine(string line)
+            {
+                _writer.WriteLine(line);
+            }
+
+            public void Dispose()
+            {
+                try { _writer.Dispose(); } catch { }
+                try { _reader.Dispose(); } catch { }
+                try { _stream.Dispose(); } catch { }
+            }
         }
     }
 }

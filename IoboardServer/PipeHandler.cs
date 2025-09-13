@@ -1,58 +1,52 @@
+// IoboardServer/PipeHandler.cs
+// ※ PipeHub.cs 内部で同等の機能を持つため、プロジェクト内に本ファイルが不要なら削除しても構いません。
+// （残す場合はテキスト行ベースの簡易ラッパとして利用してください）
+
+using System;
+using System.IO;
 using System.IO.Pipes;
 using System.Text;
-using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace IoboardServer;
-
-public class PipeHandler
+namespace IoboardServer.IPC
 {
-    private readonly NamedPipeServerStream _pipeServer;
-    private readonly Action<string> _onReceive;
-
-    public PipeHandler(string pipeName, Action<string> onReceive)
+    public sealed class PipeHandler : IDisposable
     {
-        _pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-        _onReceive = onReceive;
-    }
+        private readonly NamedPipeServerStream _server;
+        private readonly StreamReader _reader;
+        private readonly StreamWriter _writer;
+        private readonly Action<string> _onLine;
 
-    public async Task StartAsync(CancellationToken token)
-    {
-        try
+        public PipeHandler(NamedPipeServerStream server, Action<string> onLine)
         {
-            await _pipeServer.WaitForConnectionAsync(token);
-            using var reader = new StreamReader(_pipeServer, Encoding.UTF8);
-            while (!token.IsCancellationRequested)
+            _server = server;
+            _reader = new StreamReader(server, Encoding.UTF8);
+            _writer = new StreamWriter(server, Encoding.UTF8) { AutoFlush = true };
+            _onLine = onLine;
+        }
+
+        public async Task RunAsync(CancellationToken token)
+        {
+            try
             {
-                string? line = await reader.ReadLineAsync();
-                if (line != null)
+                while (!token.IsCancellationRequested && _server.IsConnected)
                 {
-                    _onReceive(line);
+                    var line = await _reader.ReadLineAsync().ConfigureAwait(false);
+                    if (line == null) break;
+                    _onLine(line);
                 }
             }
+            catch { /* ignore */ }
         }
-        catch (OperationCanceledException)
-        {
-            // 正常なキャンセル
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"PipeHandler error: {ex.Message}");
-        }
-    }
 
-    public async Task SendAsync(object message)
-    {
-        try
+        public void SendLine(string line) => _writer.WriteLine(line);
+
+        public void Dispose()
         {
-            var json = JsonSerializer.Serialize(message);
-            byte[] data = Encoding.UTF8.GetBytes(json + "\n");
-            await _pipeServer.WriteAsync(data, 0, data.Length);
-            await _pipeServer.FlushAsync();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"SendAsync error: {ex.Message}");
+            try { _writer.Dispose(); } catch { }
+            try { _reader.Dispose(); } catch { }
+            try { _server.Dispose(); } catch { }
         }
     }
 }

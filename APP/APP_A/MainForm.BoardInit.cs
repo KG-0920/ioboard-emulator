@@ -20,6 +20,8 @@ namespace APP_A
 
                 // ★ ポート名の貼り替え
                 BuildAppUi(board);
+
+            	ApplyCheckColumnLayoutFix();
             }
             catch (Exception ex)
             {

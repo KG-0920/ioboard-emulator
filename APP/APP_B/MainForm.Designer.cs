@@ -16,16 +16,16 @@ namespace APP_B
         #region Windows Form Designer generated code
         private void InitializeComponent()
         {
-            this.SuspendLayout();
+            SuspendLayout();
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(560, 400);
-            this.Name = "MainForm";
-            this.Text = "APP_B -";
-            this.ResumeLayout(false);
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(384, 400);
+            Name = "MainForm";
+            Text = "APP_B -";
+            ResumeLayout(false);
         }
         #endregion
     }

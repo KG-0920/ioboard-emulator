@@ -1,144 +1,95 @@
+// IoboardEmulator / PipeClient.cs 置き換え
 using System;
 using System.IO.Pipes;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Common;
 
 namespace IoboardEmulator
 {
     internal sealed class PipeClient : IDisposable
     {
-        private NamedPipeClientStream? _cli;
-        private CancellationTokenSource? _cts;
-        private readonly object _wlock = new();
-
-        private volatile bool _connected;
-        private volatile bool _helloSent;
-        private int? _helloRsw;
-
-        public event Action<int,int>? OnInput; // Server→Emu（入力通知）
+        public event Action<int,int>? OnInput; // (port,val)
         public event Action<string>? OnLog;
+
+        readonly string _pipeName =
+            Environment.GetEnvironmentVariable("IOBOARD_PIPE_NAME") ?? "ioboard_pipe";
+
+        NamedPipeClientStream? _stream;
+        CancellationTokenSource? _cts;
+        Task? _recvTask;
 
         public void Start()
         {
+            // ★ RSWごとにインスタンス生成される（static なし）
+            _stream = new NamedPipeClientStream(".", _pipeName,
+                        PipeDirection.InOut, PipeOptions.Asynchronous);
+            _stream.Connect(3000); // 必要に応じて待ち時間調整
             _cts = new CancellationTokenSource();
-            var ct = _cts.Token;
-            _ = Task.Run(() => RunAsync(ct), ct);
+            _recvTask = Task.Run(() => RecvLoop(_cts.Token));
+            OnLog?.Invoke("[Pipe] connected");
         }
 
-        private async Task RunAsync(CancellationToken ct)
+        public void SendHelloRsw(int rsw) => SendLine($"HELLO_RSW {rsw}");
+        public void SendWrite(int port, int val) => SendLine($"WRITE {port} {val}");
+
+        void SendLine(string line)
         {
-            while (!ct.IsCancellationRequested)
+            if (_stream is not { IsConnected: true }) return;
+            var bytes = Encoding.UTF8.GetBytes(line + "\n");
+            _stream.Write(bytes, 0, bytes.Length);
+            _stream.Flush();
+            OnLog?.Invoke($"[Pipe->] {line}");
+        }
+
+        async Task RecvLoop(CancellationToken ct)
+        {
+            var s = _stream!;
+            var buf = new byte[1024];
+            var sb = new StringBuilder();
+
+            try
             {
-                try
+                while (!ct.IsCancellationRequested && s.IsConnected)
                 {
-                    using var cli = new NamedPipeClientStream(
-                        ".", PipeConfig.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    int n = await s.ReadAsync(buf, 0, buf.Length, ct).ConfigureAwait(false);
+                    if (n <= 0) break;
+                    sb.Append(Encoding.UTF8.GetString(buf, 0, n));
 
-                    _cli = cli;
-                    OnLog?.Invoke("[EmuPipe] connecting...");
-                    await cli.ConnectAsync(ct).ConfigureAwait(false);
-                    _connected = true;
-                    OnLog?.Invoke("[EmuPipe] connected");
-
-                    // 接続直後に HELLO_RSW を必ず送る
-                    if (_helloRsw.HasValue && !_helloSent)
+                    for (;;)
                     {
-                        SendRaw($"HELLO_RSW {_helloRsw.Value}\n");
-                        _helloSent = true;
-                    }
+                        var str = sb.ToString();
+                        var nl = str.IndexOf('\n');
+                        if (nl < 0) break;
 
-                    var buf = new byte[1024];
-                    var sb = new StringBuilder();
-                    while (!ct.IsCancellationRequested && cli.IsConnected)
-                    {
-                        int n = await cli.ReadAsync(buf.AsMemory(0, buf.Length), ct).ConfigureAwait(false);
-                        if (n <= 0) break;
+                        var line = str[..nl].TrimEnd();
+                        sb.Remove(0, nl + 1);
+                        if (line.Length == 0) continue;
 
-                        sb.Append(Encoding.UTF8.GetString(buf, 0, n));
-                        while (true)
+                        OnLog?.Invoke($"[Pipe<=] {line}");
+
+                        // "INPUT <port> <val>"
+                        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 3 && parts[0].Equals("INPUT", StringComparison.OrdinalIgnoreCase)
+                            && int.TryParse(parts[1], out var port)
+                            && int.TryParse(parts[2], out var val))
                         {
-                            var all = sb.ToString();
-                            int nl = all.IndexOf('\n');
-                            if (nl < 0) break;
-
-                            var line = all.Substring(0, nl).TrimEnd('\r');
-                            sb.Remove(0, nl + 1);
-                            HandleLine(line);
+                            OnInput?.Invoke(port, val);
                         }
                     }
                 }
-                catch (OperationCanceledException) { /* ignore */ }
-                catch (Exception ex)
-                {
-                    OnLog?.Invoke($"[EmuPipe] Read error: {ex.Message}");
-                }
-                finally
-                {
-                    _connected = false;
-                    _helloSent = false; // 再接続時に再送する
-                    try { _cli?.Dispose(); } catch { }
-                    _cli = null;
-
-                    if (!ct.IsCancellationRequested)
-                        Thread.Sleep(300); // リトライ間隔
-                }
-            }
-        }
-
-        private void HandleLine(string line)
-        {
-            OnLog?.Invoke($"[<=EmuPipe] {line}");
-            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 3 &&
-                parts[0].Equals(PipeConfig.CmdInput, StringComparison.OrdinalIgnoreCase) &&
-                int.TryParse(parts[1], out var port) &&
-                int.TryParse(parts[2], out var val))
-            {
-                OnInput?.Invoke(port, val);
-            }
-        }
-
-        public void SendWrite(int port, int val)
-        {
-            SendRaw($"WRITE {port} {val}\n");
-        }
-
-        public void SendHelloRsw(int rsw)
-        {
-            _helloRsw = rsw;
-            if (_connected && !_helloSent)
-            {
-                SendRaw($"HELLO_RSW {rsw}\n");
-                _helloSent = true;
-            }
-        }
-
-        private void SendRaw(string line)
-        {
-            try
-            {
-                var cli = _cli;
-                if (cli == null || !cli.IsConnected) return;
-                var bytes = Encoding.UTF8.GetBytes(line);
-                lock (_wlock)
-                {
-                    cli.Write(bytes, 0, bytes.Length);
-                    cli.Flush();
-                }
-                OnLog?.Invoke($"[EmuPipe=>] {line.Trim()}");
             }
             catch (Exception ex)
             {
-                OnLog?.Invoke($"[EmuPipe] Write error: {ex.Message}");
+                OnLog?.Invoke($"[Pipe<=] error {ex.Message}");
             }
         }
 
         public void Dispose()
         {
             try { _cts?.Cancel(); } catch { }
-            try { _cli?.Dispose(); } catch { }
+            try { _stream?.Dispose(); } catch { }
+            _cts = null; _stream = null; _recvTask = null;
         }
     }
 }

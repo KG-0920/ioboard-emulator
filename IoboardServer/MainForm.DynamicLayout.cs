@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using IoboardServer.IPC;  // PipeHub.Instance を使う
 
 namespace IoboardServer
 {
@@ -17,6 +18,10 @@ namespace IoboardServer
         private static readonly Color LabelOffBack = Color.DimGray;
         private static readonly Color LabelOffFore = SystemColors.ControlLightLight;
 
+        // チェックボックス列の固定幅（96DPI基準）
+        private const int CheckColWidth96Dpi = 28;
+        private int Dpi(int px) => (int)Math.Round(px * DeviceDpi / 96.0);
+
         /// <summary>上段=左右(入力/出力), 下段=Log の3分割レイアウトを構築</summary>
         private void BuildServerLayout()
         {
@@ -27,8 +32,8 @@ namespace IoboardServer
                 SuspendLayout();
 
                 var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-                root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
-                root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 80)); // 上（Input/Output）
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 20)); // 下（Log）
                 Controls.Add(root);
 
                 var duo = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2 };
@@ -41,8 +46,10 @@ namespace IoboardServer
                 duo.Controls.Add(gbInput, 0, 0);
 
                 inputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Margin = new Padding(0) };
-                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+                // ★列0=ラベルは可変（残り全部）、列1=チェックは固定幅（DPI対応）
+                inputTable.ColumnStyles.Clear();
+                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Dpi(CheckColWidth96Dpi)));
                 gbInput.Controls.Add(inputTable);
 
                 // ===== 右：Output (ラベル自体を着色) =====
@@ -50,7 +57,8 @@ namespace IoboardServer
                 duo.Controls.Add(gbOutput, 1, 0);
 
                 outputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Margin = new Padding(0) };
-                // 列0＝ラベル本体（広め）、列1＝ダミー（互換用・狭め）
+                // 列0＝ラベル本体（広め）、列1＝ダミー（互換用・極小）
+                outputTable.ColumnStyles.Clear();
                 outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 98));
                 outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 2));
                 gbOutput.Controls.Add(outputTable);
@@ -95,7 +103,8 @@ namespace IoboardServer
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft,
                     Margin = new Padding(2),
-                    Padding = new Padding(6, 2, 6, 2)
+                    Padding = new Padding(6, 2, 6, 2),
+                    AutoEllipsis = true,               // はみ出しは「…」
                 };
                 tlp.Controls.Add(lb, col, row);
             }
@@ -109,27 +118,7 @@ namespace IoboardServer
             lb.ForeColor = on ? LabelOnFore : LabelOffFore;
         }
 
-        // 入力：CheckBox行（2引数版）
-        private void EnsureInputCheckboxRow(int row, string name)
-        {
-            EnsureTlpShape(inputTable!, row + 1, 2);
-            EnsureLabelCell(inputTable!, row, 0, name);
-
-            var ctrl = inputTable!.GetControlFromPosition(1, row);
-            if (ctrl is CheckBox) return;
-            if (ctrl != null) inputTable.Controls.Remove(ctrl);
-
-            int port = row;
-            var cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left };
-            cb.CheckedChanged += (s, e) =>
-            {
-                AppendLog($"[Sim] Input {port} = {cb.Checked}");
-                _pipe?.BroadcastInput(port, cb.Checked ? 1 : 0);
-            };
-            inputTable.Controls.Add(cb, 1, row);
-        }
-
-        // 入力：互換（1引数）版
+        // 入力：CheckBox行（名前は SetTlpCellText で先に設定）
         private void EnsureInputCheckboxRow(int row)
         {
             EnsureTlpShape(inputTable!, row + 1, 2);
@@ -143,7 +132,8 @@ namespace IoboardServer
             cb.CheckedChanged += (s, e) =>
             {
                 AppendLog($"[Sim] Input {port} = {cb.Checked}");
-                _pipe?.BroadcastInput(port, cb.Checked ? 1 : 0);
+                var rsw = _selectedBoard?.RotarySwitchNo ?? 0;
+                PipeHub.Instance.BroadcastInput(rsw, port, cb.Checked ? 1 : 0);
             };
             inputTable.Controls.Add(cb, 1, row);
         }
@@ -159,7 +149,7 @@ namespace IoboardServer
 
         /// <summary>
         /// 共通ラッパ：従来の "ON/OFF" テキスト更新をラベル着色にマップ
-        /// ・outputTable の (row, col==1) に "ON"/"OFF" が来た → 列0のラベル色を切替
+        /// ・outputTable の (row, col==1) に "ON"/"OFF" が来た → 列0のラベル色を切替（名前は維持）
         /// ・それ以外は通常のラベル更新
         /// </summary>
         private void SetTlpCellText(TableLayoutPanel tlp, int row, int col, string text)
@@ -169,12 +159,13 @@ namespace IoboardServer
 
             if (tlp == outputTable && col == 1 && isOnOff)
             {
-                var lb = EnsureLabelCell(outputTable!, row, 0, outputTable!.GetControlFromPosition(0, row) is Label l ? l.Text : $"OUT{row}");
+                var nameCtrl = outputTable!.GetControlFromPosition(0, row) as Label;
+                var lb = EnsureLabelCell(outputTable!, row, 0, nameCtrl != null ? nameCtrl.Text : $"OUT{row}");
                 ColorizeLabel(lb, on: text.Equals("ON", StringComparison.OrdinalIgnoreCase));
                 return;
             }
 
-            // 通常のラベル更新
+            // 通常のラベル更新（入力名称など）
             EnsureLabelCell(tlp, row, col, text);
         }
 
@@ -189,7 +180,7 @@ namespace IoboardServer
         private void AppendLog(string message)
         {
             if (logTextBox == null) return;
-            logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            logTextBox.AppendText($"[{DateTime.Now:HH:mm:ss.fff}] {message}\r\n");
         }
     }
 }

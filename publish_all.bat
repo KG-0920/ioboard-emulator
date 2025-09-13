@@ -1,26 +1,31 @@
 @echo off
-setlocal
+setlocal EnableExtensions
+rem File : publish_all.bat
+rem Ver  : v1.0 (2025-09-12 JST)
+rem Why  : 既存の呼び出し順を明示。等価リファクタは行わない。
 
-REM 引数1：Emulator/Server の CONFIG（既定 Release）
-REM 引数2：Apps の CONFIG（既定 Debug）
-set "CONFIG_EMU_SVR=%~1"
-if "%CONFIG_EMU_SVR%"=="" set "CONFIG_EMU_SVR=Release"
-set "CONFIG_APPS=%~2"
-if "%CONFIG_APPS%"=="" set "CONFIG_APPS=Debug"
-
-set "ROOT=%~dp0"
-
-echo.
+cd /d "%~dp0"
 echo ===== PUBLISH ALL START =====
 
-call "%ROOT%publish_emulator_aot.bat" "%CONFIG_EMU_SVR%" || goto :error
-call "%ROOT%publish_app_a.bat"       "%CONFIG_APPS%"     || goto :error
-call "%ROOT%publish_app_b.bat"       "%CONFIG_APPS%"     || goto :error
-call "%ROOT%publish_server.bat"      "%CONFIG_EMU_SVR%"  || goto :error
+rem エミュレータ（AOT 共有DLL）
+call "%~dp0publish_emulator_aot.bat" || goto :err
 
-echo ===== ALL DONE =====
+rem APP_A / APP_B（Debug）
+echo === Publish APP_A (win-x64, Debug) ===
+call "%~dp0publish_app_a.bat" || goto :err
+
+echo === Publish APP_B (win-x64, Debug) ===
+call "%~dp0publish_app_b.bat" || goto :err
+
+rem サーバ（Release）
+echo --- Stopping running server (if any) ---
+taskkill /f /im IoboardServer.exe >nul 2>nul
+
+echo === Publish IoboardServer [Release] ===
+call "%~dp0publish_server.bat" || goto :err
+
 exit /b 0
 
-:error
-echo [ERROR] One of publish steps failed.
+:err
+echo *** ERROR in publish_all.bat ***
 exit /b 1

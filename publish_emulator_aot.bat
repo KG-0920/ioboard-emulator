@@ -1,35 +1,28 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions
+rem File : publish_emulator_aot.bat
+rem Ver  : v1.0 (2025-09-12 JST)
+rem Why  : IoboardEmulator を Release/AOT(shared DLL) で発行。等価リファクタは行わない。
 
-REM ==== Settings ====
-set "RID=win-x64"
-set "CONFIG=%~1"
-if "%CONFIG%"=="" set "CONFIG=Release"
+cd /d "%~dp0"
 
-REM ==== Paths ====
-set "ROOT=%~dp0"
-set "CSProj=%ROOT%IoboardEmulator\IoboardEmulator.csproj"
-set "OUTDIR=%ROOT%IoboardEmulator\publish\%RID%\%CONFIG%"
-set "DLLNAME=IoboardEmulator.dll"
-set "APP_PUBLISH=%ROOT%APP\publish"
+rem clean（既存構造に合わせて最低限）
+rd /s /q "IoboardEmulator\bin"  2>nul
+rd /s /q "IoboardEmulator\obj"  2>nul
+rd /s /q "APP\publish"          2>nul
 
-REM ==== Sanity checks ====
-where dotnet >nul 2>nul || (echo [ERROR] dotnet not found & exit /b 1)
-if not exist "%CSProj%" (echo [ERROR] Not found: %CSProj% & exit /b 1)
+rem AOT 発行（NativeLib=Shared）
+dotnet publish "IoboardEmulator\IoboardEmulator.csproj" ^
+  -c Release -r win-x64 ^
+  -p:PublishAot=true -p:NativeLib=Shared -p:SelfContained=true -p:StripSymbols=true ^
+  -o "APP\publish" || goto :err
 
-echo.
-echo === Publish IoboardEmulator (AOT, %RID%, %CONFIG%) ===
-dotnet publish "%CSProj%" -c "%CONFIG%" -r "%RID%" -o "%OUTDIR%" ^
- /p:PublishAot=true /p:NativeLib=Shared /p:SelfContained=true /p:StripSymbols=true /p:InvariantGlobalization=true
-if errorlevel 1 (echo [ERROR] dotnet publish failed & exit /b 1)
+if not exist "APP\publish\IoboardEmulator.dll" goto :err
 
-if not exist "%OUTDIR%\%DLLNAME%" (echo [ERROR] Missing %DLLNAME% at %OUTDIR% & exit /b 1)
-
-echo.
-echo === Copy emulator DLL to APP/publish (parent folder strategy for Debug) ===
-if not exist "%APP_PUBLISH%" mkdir "%APP_PUBLISH%"
-copy /Y "%OUTDIR%\%DLLNAME%" "%APP_PUBLISH%\%DLLNAME%" >nul
-if errorlevel 1 (echo [ERROR] Copy failed & exit /b 1)
-
-echo [OK] %DLLNAME% -> %APP_PUBLISH%
+for %%F in ("APP\publish\IoboardEmulator.dll") do set SIZE=%%~zF
+echo --- Output: "%cd%\APP\publish\IoboardEmulator.dll" (%SIZE% bytes)
 exit /b 0
+
+:err
+echo *** ERROR in publish_emulator_aot.bat ***
+exit /b 1
