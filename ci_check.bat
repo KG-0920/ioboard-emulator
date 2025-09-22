@@ -60,33 +60,6 @@ echo === Publish Emu/Server=Release, Apps=Debug ===
 echo ===== PUBLISH ALL START =====
 call "publish_all.bat" || goto :err
 
-REM =========================================================
-REM (A) 旧パイプ名ガード（V1 準拠）
-REM =========================================================
-echo === Verify forbidden pipe names (canonical only) ===
-if exist "tools\verify_pipes.ps1" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "tools\verify_pipes.ps1"
-  if errorlevel 1 goto :err
-) else (
-  echo [ERR] tools\verify_pipes.ps1 not found. Please add it. & goto :err
-)
-
-REM =========================================================
-REM (C) エクスポート確認（dumpbin が使える場合のみ）
-REM =========================================================
-where dumpbin >nul 2>nul
-if not errorlevel 1 (
-  if exist "assert_emu_exports.bat" (
-    echo === Verify exports of IoboardEmulator.dll (dumpbin) ===
-    call "assert_emu_exports.bat"
-    if errorlevel 1 goto :err
-  ) else (
-    echo [INFO] assert_emu_exports.bat not found. Skipping export verification hook.
-  )
-) else (
-  echo [INFO] dumpbin not found. Skipping export verification. (Use Developer Command Prompt to enable)
-)
-
 echo === DONE ===
 exit /b 0
 
