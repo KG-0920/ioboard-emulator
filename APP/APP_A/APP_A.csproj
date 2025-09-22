@@ -17,4 +17,9 @@
     <Compile Include="..\..\SharedConfig\**\*.cs"
              Link="SharedConfig\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- New: Common プロジェクト参照（相対パスは APP/APP_A → ルート/Common を想定） -->
+    <ProjectReference Include="..\..\Common\Common.csproj" />
+  </ItemGroup>
 </Project>

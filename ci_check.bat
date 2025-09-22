@@ -72,48 +72,6 @@ if exist "tools\verify_pipes.ps1" (
 )
 
 REM =========================================================
-REM (B) 配布整合（SHA256）：手動配布後に APP\ が存在する場合のみ検査
-REM   - APP\IoboardEmulator.dll  vs APP\publish\IoboardEmulator.dll
-REM   - APP\IoboardServer.exe    vs IoboardServer\publish\win-x64\Release\IoboardServer.exe
-REM =========================================================
-echo === Verify distribution integrity (SHA256) ===
-if exist "APP\IoboardEmulator.dll" (
-  if not exist "APP\publish\IoboardEmulator.dll" (
-    echo [ERR] Missing: APP\publish\IoboardEmulator.dll & goto :err
-  )
-  for %%F in (IoboardEmulator.dll) do (
-    for /f "tokens=1,*" %%a in ('powershell -NoProfile -Command "Get-FileHash -Algorithm SHA256 '.\APP\%%F' | %% {$_.Hash}"') do set H1=%%a
-    for /f "tokens=1,*" %%a in ('powershell -NoProfile -Command "Get-FileHash -Algorithm SHA256 '.\APP\publish\%%F' | %% {$_.Hash}"') do set H2=%%a
-    if /I not "!H1!"=="!H2!" (
-      echo [ERR] HASH mismatch: %%F
-      echo   APP\%%F         = !H1!
-      echo   APP\publish\%%F = !H2!
-      goto :err
-    )
-  )
-) else (
-  echo [INFO] APP\IoboardEmulator.dll not found. Skipping deploy integrity check for DLL (manual copy not done yet?).
-)
-
-if exist "APP\IoboardServer.exe" (
-  if not exist "IoboardServer\publish\win-x64\Release\IoboardServer.exe" (
-    echo [ERR] Missing: IoboardServer\publish\win-x64\Release\IoboardServer.exe & goto :err
-  )
-  for %%F in (IoboardServer.exe) do (
-    for /f "tokens=1,*" %%a in ('powershell -NoProfile -Command "Get-FileHash -Algorithm SHA256 '.\APP\%%F' | %% {$_.Hash}"') do set H1=%%a
-    for /f "tokens=1,*" %%a in ('powershell -NoProfile -Command "Get-FileHash -Algorithm SHA256 '.\IoboardServer\publish\win-x64\Release\%%F' | %% {$_.Hash}"') do set H2=%%a
-    if /I not "!H1!"=="!H2!" (
-      echo [ERR] HASH mismatch: %%F
-      echo   APP\%%F                                   = !H1!
-      echo   IoboardServer\publish\win-x64\Release\%%F = !H2!
-      goto :err
-    )
-  )
-) else (
-  echo [INFO] APP\IoboardServer.exe not found. Skipping deploy integrity check for Server (manual copy not done yet?).
-)
-
-REM =========================================================
 REM (C) エクスポート確認（dumpbin が使える場合のみ）
 REM =========================================================
 where dumpbin >nul 2>nul

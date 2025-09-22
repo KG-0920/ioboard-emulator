@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 using SharedConfig;
+using IoboardServer.IPC;
 
 namespace IoboardServer
 {
@@ -33,6 +34,9 @@ namespace IoboardServer
             }
 
             ApplicationConfiguration.Initialize();
+
+			// ★ Hubの待受（IoboardBus）をUIより前に“確実起動”
+			var _ = PipeHub.Instance;
 
             // ✅ ConfigLocator はメソッド。IoboardConfig.xml のフルパスを取得してから Load します。
             var xmlPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");

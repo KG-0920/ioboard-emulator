@@ -1,71 +1,132 @@
+// APP_A 版。APP_B は namespace を APP_B に変えて同一内容で OK。
 using System;
 using System.Drawing;
 using System.Windows.Forms;
 using SharedConfig;
+using Common;  // ← 追加
 using IoboardConfigNS = SharedConfig.IoboardConfig;
 
-namespace APP_A   // ★APP_B では APP_B に変更
+namespace APP_A   // ★APP_B 側は APP_B に変更
 {
     public partial class MainForm : Form
     {
-        private TableLayoutPanel? inputTable;   // 右：入力（ラベル着色）
-        private TableLayoutPanel? outputTable;  // 左：出力（チェック）
+        private TableLayoutPanel? inputTable;   // 入力：ラベル色で ON/OFF
+        private TableLayoutPanel? outputTable;  // 出力：CheckBox
         private int _inputCount  = 0;
         private int _outputCount = 0;
 
-        // 配色（入力ラベル）
         private static readonly Color LabelOnBack  = Color.LimeGreen;
         private static readonly Color LabelOnFore  = Color.White;
         private static readonly Color LabelOffBack = Color.DimGray;
         private static readonly Color LabelOffFore = SystemColors.ControlLightLight;
 
+        /// <summary>
+        /// XML の BoardInfo を元に UI 構築（唯一の入口）
+        /// ・件数：Ports.Count を使用（0/未定義は 64 にフォールバック）
+        /// ・名称：PortInfo.Name を使用（未設定は FBIDIO?/IN|OUT{N}）
+        /// ・出力：CheckBox.Tag に “0 起点のポート番号” を格納
+        /// </summary>
         private void BuildClientUi(IoboardConfigNS.BoardInfo? board)
         {
             EnsureClientTables();
 
-            _inputCount  = board?.InputPorts?.Count  ?? 16;
-            _outputCount = board?.OutputPorts?.Count ?? 16;
+            const int MaxInputs  = 64;
+            const int MaxOutputs = 64;
+
+            var inList  = board?.InputPorts;
+            var outList = board?.OutputPorts;
+
+            // 件数は Ports.Count を見る（←ここが重要）
+            _inputCount  = (inList  != null && inList.Ports.Count  > 0) ? Math.Min(inList.Ports.Count,  MaxInputs)  : MaxInputs;
+            _outputCount = (outList != null && outList.Ports.Count > 0) ? Math.Min(outList.Ports.Count, MaxOutputs) : MaxOutputs;
+
+            string devName = board?.DeviceName ?? $"FBIDIO{_rotarySwitchNo}";
+
+            AppendLog($"Resolved counts: Inputs={_inputCount}, Outputs={_outputCount}");
 
             this.SafeInvoke(() =>
             {
                 EnsureTlpShape(inputTable!,  _inputCount,  2);
                 EnsureTlpShape(outputTable!, _outputCount, 2);
 
-                // ----- 出力（左）: 名前 + CheckBox -----
+                var cs = outputTable!.ColumnStyles;
+                if (cs.Count >= 2) {
+                    cs[0].SizeType = SizeType.Percent;
+                    cs[0].Width    = 75;
+                    cs[1].SizeType = SizeType.Percent;
+                    cs[1].Width    = 25;
+                }
+
+                // ===== 出力（左：名称ラベル／右：チェック）=====
                 for (int r = 0; r < _outputCount; r++)
                 {
-                    string name = (board?.OutputPorts != null && r < board.OutputPorts.Count) ? board.OutputPorts[r].Name : $"OUT{r}";
+                    string name =
+                        (outList != null && r < outList.Ports.Count && !string.IsNullOrWhiteSpace(outList.Ports[r].Name))
+                        ? outList.Ports[r].Name
+                        : $"{devName} OUT{r}";
                     EnsureNameLabel(outputTable!, r, 0, name);
 
+                    // 既存のコントロールがあれば外して差し替え
                     var old = outputTable!.GetControlFromPosition(1, r);
                     if (old != null) outputTable.Controls.Remove(old);
 
-                    var cb = new CheckBox { AutoSize = true, Margin = new Padding(2), Anchor = AnchorStyles.Left, Tag = r };
-                    cb.CheckedChanged += OnOutputCheckedChanged;
+                    var cb = new CheckBox
+                    {
+                        Tag = r, // ★ここに 0 起点のポート番号を必ず入れる
+                        AutoSize = true,
+                        Dock = DockStyle.None,
+                        Anchor = AnchorStyles.Left,
+                        Margin = new Padding(2),
+                        UseVisualStyleBackColor = true,
+                        Cursor = Cursors.Hand,
+                        TabStop = true,
+                    };
+                    cb.CheckedChanged += OnOutputCheckedChanged; // 既存ハンドラを使用
                     outputTable.Controls.Add(cb, 1, r);
+                    cb.BringToFront();
                 }
 
-                // ----- 入力（右）: 名前ラベルのみ（色でON/OFF表現） -----
+                // ===== 入力（名称ラベルのみ／色で ON/OFF 表示）=====
                 for (int r = 0; r < _inputCount; r++)
                 {
-                    string name = (board?.InputPorts != null && r < board.InputPorts.Count) ? board.InputPorts[r].Name : $"IN{r}";
+                    string name =
+                        (inList != null && r < inList.Ports.Count && !string.IsNullOrWhiteSpace(inList.Ports[r].Name))
+                        ? inList.Ports[r].Name
+                        : $"{devName} IN{r}";
                     var lb = EnsureNameLabel(inputTable!, r, 0, name);
                     ColorizeLabel(lb, on: false);
                 }
             });
         }
 
+        // 出力チェックの既存ハンドラ：Tag から 0 起点のポート番号を取得して出力 API を叩く
         private void OnOutputCheckedChanged(object? sender, EventArgs e)
         {
             if (sender is not CheckBox cb) return;
-            if (cb.Tag is not int port) return;
+            if (cb.Tag is not int port)   return;
+
             bool val = cb.Checked;
-            AppendLog($"WriteOutput({port}) = {val}");
-            try { _controller.WriteOutput(_rotarySwitchNo, port, val); }
-            catch (Exception ex) { AppendLog($"[ERR] WriteOutput failed: {ex.Message}"); }
+
+            // ★ 追加：UI で見えている表示名を抽出（Ports[i].Name 優先の実観測値）
+            string name = GetOutputNameOrDefault(port);
+
+#if IOBOARD_TRACE
+            // ★ 追加：串刺しトレース（APP側）
+            DiagTrace.Write("WRITE", _rotarySwitchNo, port, val, "APP_A", name, port);
+#endif
+
+        	AppendLog($"WriteOutput({port}) = {val}");
+            try
+            {
+                _controller.WriteOutput(_rotarySwitchNo, port, val);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERR] WriteOutput failed: {ex.Message}");
+            }
         }
 
-        // ====== レイアウト基盤（上：左右/下：ログ） ======
+        // ========== レイアウト基盤 ==========
         private void EnsureClientTables()
         {
             if (inputTable != null && outputTable != null && logTextBox != null) return;
@@ -82,19 +143,19 @@ namespace APP_A   // ★APP_B では APP_B に変更
                 duo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 root.Controls.Add(duo, 0, 0);
 
-                // 左 = 出力（チェック）
+                // 左：出力
                 outputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, Margin = new Padding(6), ColumnCount = 2 };
                 outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
                 outputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
                 duo.Controls.Add(outputTable, 0, 0);
 
-                // 右 = 入力（ラベル着色。列1はダミー互換）
+                // 右：入力
                 inputTable = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, Margin = new Padding(6), ColumnCount = 2 };
                 inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 98));
                 inputTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 2));
                 duo.Controls.Add(inputTable, 1, 0);
 
-                // 下 = ログ
+                // 下：ログ
                 logTextBox = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true, Margin = new Padding(6) };
                 root.Controls.Add(logTextBox, 0, 1);
             });
@@ -111,7 +172,7 @@ namespace APP_A   // ★APP_B では APP_B に変更
             if (tlp.RowCount < minRows)
             {
                 for (int r = tlp.RowCount; r < minRows; r++)
-                    tlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); // 行を詰める
+                    tlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
                 tlp.RowCount = minRows;
             }
         }
@@ -127,6 +188,7 @@ namespace APP_A   // ★APP_B では APP_B に変更
                     AutoSize = false,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft,
+                    AutoEllipsis = true,
                     Margin = new Padding(2),
                     Padding = new Padding(6, 2, 6, 2)
                 };
@@ -143,8 +205,7 @@ namespace APP_A   // ★APP_B では APP_B に変更
         }
 
         /// <summary>
-        /// 共通ラッパ：入力テーブルの (row, col==1) に "ON"/"OFF" が来たら列0ラベルを着色
-        /// それ以外は通常のラベル更新
+        /// 入力テーブルの (row, col==1) に "ON"/"OFF" が来たら列0ラベルを着色
         /// </summary>
         private void SetTlpCellText(TableLayoutPanel tlp, int row, int col, string text)
         {
@@ -153,12 +214,12 @@ namespace APP_A   // ★APP_B では APP_B に変更
 
             if (tlp == inputTable && col == 1 && isOnOff)
             {
-                var lb = EnsureNameLabel(inputTable!, row, 0, inputTable!.GetControlFromPosition(0, row) is Label l ? l.Text : $"IN{row}");
+                var left = inputTable!.GetControlFromPosition(0, row) as Label;
+                var lb = EnsureNameLabel(inputTable!, row, 0, left?.Text ?? $"IN{row}");
                 ColorizeLabel(lb, on: text.Equals("ON", StringComparison.OrdinalIgnoreCase));
                 return;
             }
 
-            // 通常のラベル更新
             EnsureNameLabel(tlp, row, col, text);
         }
 
@@ -166,6 +227,22 @@ namespace APP_A   // ★APP_B では APP_B に変更
         {
             if (IsHandleCreated && InvokeRequired) BeginInvoke(action);
             else action();
+        }
+
+        // ★ 追加：出力名を UI から取得（Ports[i].Name 優先の実観測名）
+        private string GetOutputNameOrDefault(int port)
+        {
+            try
+            {
+                if (outputTable != null &&
+                    outputTable.GetControlFromPosition(0, port) is Label lb &&
+                    !string.IsNullOrWhiteSpace(lb.Text))
+                {
+                    return lb.Text;
+                }
+            }
+            catch { }
+            return $"OUT{port}";
         }
     }
 }

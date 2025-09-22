@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using SharedConfig;
+using Common; // ← 追加: DiagTrace
 
 namespace IoBoardWrapper
 {
@@ -31,6 +32,7 @@ namespace IoBoardWrapper
                 IoLogger.Error("IoboardWrapper static init failed.", ex);
             }
         }
+
         private static IntPtr ResolveNative(string libraryName, Assembly assembly, DllImportSearchPath? _)
         {
             bool IsTarget(string n) => string.Equals(n, Native, StringComparison.OrdinalIgnoreCase)
@@ -50,6 +52,7 @@ namespace IoBoardWrapper
             IoLogger.Warn($"Native DLL not found by resolver. libraryName='{libraryName}'");
             return IntPtr.Zero;
         }
+
         private static IEnumerable<string> CandidateDirs()
         {
             var list = new List<string>();
@@ -207,7 +210,12 @@ namespace IoBoardWrapper
             int byteIndex = port / 8;
             int bitIndex  = port % 8;
 
-            lock (_sync)
+#if IOBOARD_TRACE
+            // ★ 追加: 串刺しトレース（Wrapper）
+            DiagTrace.Write("WRITE", rotarySwitchNo, port, value, "Wrapper");
+#endif
+
+        	lock (_sync)
             {
                 if (!_handleByRsw.TryGetValue(rotarySwitchNo, out var h) || h == IntPtr.Zero) return;
 
@@ -252,7 +260,14 @@ namespace IoBoardWrapper
                         IoLogger.Warn($"DioInputByte rc={rc} (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})");
                         return false;
                     }
-                    return ((val >> bitIndex) & 0x01) != 0;
+                    bool on = ((val >> bitIndex) & 0x01) != 0;
+
+#if IOBOARD_TRACE
+                    // ★ 追加: 串刺しトレース（Wrapper）
+                    DiagTrace.Write("INPUT", rotarySwitchNo, port, on, "Wrapper");
+#endif
+
+                	return on;
                 }
                 catch (Exception ex)
                 {

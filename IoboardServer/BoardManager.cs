@@ -1,18 +1,19 @@
 using System.Collections.Concurrent;
 using SharedConfig;
+using Common; // ← 追加: DiagTrace
 
 namespace IoboardServer;
 
 public class BoardManager
 {
     private readonly IoboardConfig _config; // ★ 追加
-    
+
     // ★ 追加: Program.cs の new BoardManager(config) に合わせる
     public BoardManager(IoboardConfig config)
     {
         _config = config;
     }
-    
+
     private class BoardInstance
     {
         public int RotarySwitch { get; set; }
@@ -59,7 +60,12 @@ public class BoardManager
 
         board.OutputStates[port] = value;
 
-        board.EnsureFormCreated(rotarySwitchNo);
+#if IOBOARD_TRACE
+        // ★ 追加: 串刺しトレース（ServerUI 反映直前）
+        DiagTrace.Write("WRITE", rotarySwitchNo, port, value, "ServerUI");
+#endif
+
+    	board.EnsureFormCreated(rotarySwitchNo);
         board.Form?.UpdateOutput(port, value);
     }
 
@@ -76,7 +82,13 @@ public class BoardManager
         if (!_boards.TryGetValue(rotarySwitchNo, out var board)) return;
 
         board.InputStates[port] = value;
-        board.EnsureFormCreated(rotarySwitchNo);
+
+#if IOBOARD_TRACE
+        // ★ 追加: 串刺しトレース（ServerUI 反映直前）
+        DiagTrace.Write("INPUT", rotarySwitchNo, port, value, "ServerUI");
+#endif
+
+    	board.EnsureFormCreated(rotarySwitchNo);
         board.Form?.UpdateInput(port, value);
     }
 }

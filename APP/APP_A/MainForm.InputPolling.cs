@@ -1,30 +1,42 @@
 using System;
 using System.Windows.Forms;
 
-namespace APP_A   // ★APP_B では APP_B
+namespace APP_A   // ★APP_B では APP_B に変更
 {
     public partial class MainForm : Form
     {
         private System.Windows.Forms.Timer? _inputTimer;
+        private bool[]? _lastIn;
+
+        // 1周期で全ポート読む（DLLがキャッシュ返答なので軽量）
+        private const int PollIntervalMs = 100;
 
         private void StartInputPolling()
         {
             if (_inputTimer != null) return;
-            _inputTimer = new System.Windows.Forms.Timer { Interval = 100 }; // 100ms
-            _inputTimer.Tick += (s, e) => RefreshInputsOnce();
+
+            _lastIn = new bool[_inputCount];
+
+            _inputTimer = new System.Windows.Forms.Timer { Interval = PollIntervalMs };
+            _inputTimer.Tick += (s, e) => RefreshAllInputsOnce();
             _inputTimer.Start();
-            AppendLog("[UI] Input polling started (100ms)");
+
+            AppendLog($"[UI] Input polling (all ports) started ({PollIntervalMs}ms)");
         }
 
-        // 1回分だけ入力状態を読み、UIを反映
-        private void RefreshInputsOnce()
+        private void RefreshAllInputsOnce()
         {
             try
             {
-                // ★ _boardInfo ではなく、BuildClientUi で決めた _inputCount を使う
+                if (_lastIn == null) return;
+
                 for (int port = 0; port < _inputCount; port++)
                 {
-                    bool on = _controller.ReadInput(_rotarySwitchNo, port);
+                    bool on = _controller.ReadInput(_rotarySwitchNo, port); // DLLキャッシュを読むだけ
+                    if (on == _lastIn[port]) continue;                      // 差分のみUI更新
+                    _lastIn[port] = on;
+
+                    // ここはUIスレッドなので直接反映でOK（必要ならBeginInvokeに）
                     SetTlpCellText(inputTable!, port, 1, on ? "ON" : "OFF");
                 }
             }
@@ -34,10 +46,6 @@ namespace APP_A   // ★APP_B では APP_B
             }
         }
 
-        // 既存の初期化の最後に MainForm.cs から呼んでいます（AfterUiInitialized_StartPolling）
-        private void AfterUiInitialized_StartPolling()
-        {
-            StartInputPolling();
-        }
+        private void AfterUiInitialized_StartPolling() => StartInputPolling();
     }
 }

@@ -6,7 +6,10 @@ namespace Common
     public static class Logger
     {
         private static readonly object _lock = new();
-        private static readonly string _logFile = "ioboard_log.txt";
+
+        // 出力先を実行ファイルと同じフォルダに固定
+        private static readonly string _logFile =
+            Path.Combine(AppContext.BaseDirectory, "ioboard_log.txt");
 
         public static void Log(string message)
         {

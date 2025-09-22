@@ -1,8 +1,7 @@
 using System;
-using System.Linq;
 using System.Windows.Forms;
-using IoBoardWrapper;   // IIoBoardController / IoboardWrapper
-using SharedConfig;     // ConfigLocator / IoboardConfig
+using IoBoardWrapper;
+using SharedConfig;
 using IoboardConfigNS = SharedConfig.IoboardConfig;
 
 namespace APP_B
@@ -10,44 +9,54 @@ namespace APP_B
     public partial class MainForm : Form
     {
         private readonly IIoBoardController _controller;
-        private IoboardConfigNS _config = null!;
         private int _rotarySwitchNo = 0;
 
-        // 動的生成するログ欄（Designerには置かない）
+        // 動的ログ欄（BuildClientUi 内で生成）
         private TextBox? logTextBox;
+
+        // Shown に Open をぶら下げるのは 1 回だけ
+        private bool _openHandlerAttached = false;
 
         public MainForm()
         {
             InitializeComponent();
-
-            // 設定ロード
-            var cfgPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");
-            _config = IoboardConfigNS.Load(cfgPath);
-
-            var board = (_config?.Boards != null && _config.Boards.Count > 0)
-                        ? _config.Boards[0] : null;
-
-            if (board != null)
-            {
-                _rotarySwitchNo = board.RotarySwitchNo;
-                this.Text = $"APP_B - {board.DeviceName}";
-            }
-
-            // 画面を動的構築（出力=CheckBox / 入力=ラベル / 下部にログ）
-            BuildClientUi(board);
-
-            // I/O コントローラ
             _controller = new IoboardWrapper();
 
-            bool success = _controller.Open(_rotarySwitchNo);
-            AppendLog(success ? "Open 成功" : "Open 失敗");
-
-        	AfterUiInitialized_StartPolling();
+            // ここでは UI を構築しない／XML も読まない（先行描画を防止）
+            this.FormClosed += (_, __) =>
+            {
+                try { _controller.Close(_rotarySwitchNo); } catch { }
+            };
         }
 
-        private void MainForm_FormClosed(object? sender, FormClosedEventArgs e)
+        /// <summary>
+        /// Program.cs 側で XML から決定した BoardInfo を受け取り、ここでだけ UI を構築する。
+        /// </summary>
+        public void InitializeForBoard(IoboardConfigNS.BoardInfo board)
         {
-            try { _controller.Close(_rotarySwitchNo); } catch { }
+            _rotarySwitchNo = board.RotarySwitchNo;
+            this.Text = $"APP_B - RSW {_rotarySwitchNo} ({board.DeviceName})";
+
+            // UI 構築（件数＝XML優先／未定義のみ64へフォールバック）
+            BuildClientUi(board);
+            ApplyCheckColumnLayoutFix(); // 既存の列幅補正
+
+            // ログ出力（UI構築後なら logTextBox がある）
+            var cfgPath = ConfigLocator.GetConfigFilePath("IoboardConfig.xml");
+            AppendLog($"Config path = {cfgPath}");
+            AppendLog($"Board[RSW={board.RotarySwitchNo}]: DeviceName={board.DeviceName}");
+
+            if (!_openHandlerAttached)
+            {
+                _openHandlerAttached = true;
+                this.Shown += async (_, __) =>
+                {
+                    AppendLog("Connecting...");
+                    bool success = await System.Threading.Tasks.Task.Run(() => _controller.Open(_rotarySwitchNo));
+                    AppendLog(success ? "Open 成功" : "Open 失敗");
+                    if (success) AfterUiInitialized_StartPolling();
+                };
+            }
         }
 
         private void AppendLog(string message)
