@@ -1,3 +1,4 @@
+#define IOBOARD_TRACE   // ← 通常OFF。必要なときだけ定義
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,11 +26,15 @@ namespace IoBoardWrapper
             try
             {
                 NativeLibrary.SetDllImportResolver(typeof(IoboardWrapper).Assembly, ResolveNative);
+#if IOBOARD_TRACE
                 IoLogger.Info($"IoboardWrapper static init. Native='{Native}' BaseDir='{AppContext.BaseDirectory}'");
+#endif
             }
             catch (Exception ex)
             {
+#if IOBOARD_TRACE
                 IoLogger.Error("IoboardWrapper static init failed.", ex);
+#endif
             }
         }
 
@@ -45,11 +50,15 @@ namespace IoBoardWrapper
                 var path = Path.Combine(dir, libraryName + ".dll");
                 if (File.Exists(path) && NativeLibrary.TryLoad(path, out var h))
                 {
+#if IOBOARD_TRACE
                     IoLogger.Info($"Native DLL loaded: {path}");
+#endif
                     return h;
                 }
             }
+#if IOBOARD_TRACE
             IoLogger.Warn($"Native DLL not found by resolver. libraryName='{libraryName}'");
+#endif
             return IntPtr.Zero;
         }
 
@@ -138,18 +147,31 @@ namespace IoBoardWrapper
                     }
                     catch (Exception exInfo)
                     {
+#if IOBOARD_TRACE
                         IoLogger.Error($"DioCommonGetPciDeviceInfo failed at index={i}", exInfo);
+#endif
                     }
 
                     if (!match)
                     {
-                        try { _ = DioClose(h); } catch (Exception exClose) { IoLogger.Error($"DioClose failed at index={i}", exClose); }
+                        try
+                    	{
+                    		_ = DioClose(h);
+                    	}
+                    	catch (Exception exClose)
+                    	{
+#if IOBOARD_TRACE
+                    		IoLogger.Error($"DioClose failed at index={i}", exClose);
+#endif
+                    	}
                     }
                 }
 
                 if (found == IntPtr.Zero)
                 {
+#if IOBOARD_TRACE
                     IoLogger.Warn($"Open failed: RSW={rotarySwitchNo} not found.");
+#endif
                     return false;
                 }
 
@@ -164,27 +186,41 @@ namespace IoBoardWrapper
 
                 sw.Stop();
                 if (sw.ElapsedMilliseconds > 1000)
+            	{
+#if IOBOARD_TRACE
                     IoLogger.Warn($"Open took {sw.ElapsedMilliseconds} ms (RSW={rotarySwitchNo})");
+#endif
+            	}
                 else
+            	{
+#if IOBOARD_TRACE
                     IoLogger.Info($"Open ok (RSW={rotarySwitchNo}, {sw.ElapsedMilliseconds} ms)");
+#endif
+            	}
                 return true;
             }
             catch (DllNotFoundException exDll)
             {
                 sw.Stop();
+#if IOBOARD_TRACE
                 IoLogger.Error($"Open DllNotFound (RSW={rotarySwitchNo})", exDll);
+#endif
                 return false;
             }
             catch (EntryPointNotFoundException exEp)
             {
                 sw.Stop();
+#if IOBOARD_TRACE
                 IoLogger.Error($"Open EntryPointNotFound (RSW={rotarySwitchNo})", exEp);
+#endif
                 return false;
             }
             catch (Exception ex)
             {
                 sw.Stop();
+#if IOBOARD_TRACE
                 IoLogger.Error($"Open unexpected error (RSW={rotarySwitchNo})", ex);
+#endif
                 return false;
             }
         }
@@ -195,13 +231,23 @@ namespace IoBoardWrapper
             {
                 if (_handleByRsw.TryGetValue(rotarySwitchNo, out var h) && h != IntPtr.Zero)
                 {
-                    try { _ = DioClose(h); }
-                    catch (Exception ex) { IoLogger.Error($"Close error (RSW={rotarySwitchNo})", ex); }
+                    try
+                	{
+                		_ = DioClose(h);
+                	}
+                    catch (Exception ex)
+                	{
+#if IOBOARD_TRACE
+                		IoLogger.Error($"Close error (RSW={rotarySwitchNo})", ex);
+#endif
+                	}
                 }
                 _handleByRsw.Remove(rotarySwitchNo);
                 _outShadowByRsw.Remove(rotarySwitchNo);
             }
+#if IOBOARD_TRACE
             IoLogger.Info($"Close done (RSW={rotarySwitchNo})");
+#endif
         }
 
         public void WriteOutput(int rotarySwitchNo, int port, bool value)
@@ -233,11 +279,17 @@ namespace IoBoardWrapper
                 {
                     var rc = DioOutputByte(h, byteIndex, shadow[byteIndex]);
                     if (rc != ERROR_SUCCESS)
+                    {
+#if IOBOARD_TRACE
                         IoLogger.Warn($"DioOutputByte rc={rc} (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})");
+#endif
+					}
                 }
                 catch (Exception ex)
                 {
+#if IOBOARD_TRACE
                     IoLogger.Error($"DioOutputByte exception (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})", ex);
+#endif
                 }
             }
         }
@@ -257,7 +309,9 @@ namespace IoBoardWrapper
                     var rc = DioInputByte(h, byteIndex, out byte val);
                     if (rc != ERROR_SUCCESS)
                     {
+#if IOBOARD_TRACE
                         IoLogger.Warn($"DioInputByte rc={rc} (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})");
+#endif
                         return false;
                     }
                     bool on = ((val >> bitIndex) & 0x01) != 0;
@@ -271,7 +325,9 @@ namespace IoBoardWrapper
                 }
                 catch (Exception ex)
                 {
+#if IOBOARD_TRACE
                     IoLogger.Error($"DioInputByte exception (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})", ex);
+#endif
                     return false;
                 }
             }
