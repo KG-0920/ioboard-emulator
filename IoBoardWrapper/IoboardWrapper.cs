@@ -109,7 +109,8 @@ namespace IoBoardWrapper
             out uint subsystemId, out uint subsystemVendorId, out uint interruptLine,
             out uint boardId);
 
-        private const int OUTPUT_BYTES_LEN = 4;
+        // 旧: OUTPUT_BYTES_LEN = 4 固定 → 初期値として残し、必要に応じて拡張
+        private const int INITIAL_OUTPUT_BYTES_LEN = 4;
 
         private static readonly object _sync = new();
         private static readonly Dictionary<int, IntPtr> _handleByRsw    = new();
@@ -155,15 +156,15 @@ namespace IoBoardWrapper
                     if (!match)
                     {
                         try
-                    	{
-                    		_ = DioClose(h);
-                    	}
-                    	catch (Exception exClose)
-                    	{
+                        {
+                        	_ = DioClose(h);
+                        }
+                        catch (Exception exClose)
+                        {
 #if IOBOARD_TRACE
-                    		IoLogger.Error($"DioClose failed at index={i}", exClose);
+                            IoLogger.Error($"DioClose failed at index={i}", exClose);
 #endif
-                    	}
+                        }
                     }
                 }
 
@@ -178,25 +179,26 @@ namespace IoBoardWrapper
                 lock (_sync)
                 {
                     _handleByRsw[rotarySwitchNo] = found;
-                    if (!_outShadowByRsw.TryGetValue(rotarySwitchNo, out var shadow) || shadow == null || shadow.Length != OUTPUT_BYTES_LEN)
+
+                    if (!_outShadowByRsw.TryGetValue(rotarySwitchNo, out var shadow) || shadow == null)
                     {
-                        _outShadowByRsw[rotarySwitchNo] = new byte[OUTPUT_BYTES_LEN];
+                        _outShadowByRsw[rotarySwitchNo] = new byte[INITIAL_OUTPUT_BYTES_LEN];
                     }
                 }
 
                 sw.Stop();
                 if (sw.ElapsedMilliseconds > 1000)
-            	{
+                {
 #if IOBOARD_TRACE
                     IoLogger.Warn($"Open took {sw.ElapsedMilliseconds} ms (RSW={rotarySwitchNo})");
 #endif
-            	}
+                }
                 else
-            	{
+                {
 #if IOBOARD_TRACE
                     IoLogger.Info($"Open ok (RSW={rotarySwitchNo}, {sw.ElapsedMilliseconds} ms)");
 #endif
-            	}
+                }
                 return true;
             }
             catch (DllNotFoundException exDll)
@@ -232,15 +234,15 @@ namespace IoBoardWrapper
                 if (_handleByRsw.TryGetValue(rotarySwitchNo, out var h) && h != IntPtr.Zero)
                 {
                     try
-                	{
-                		_ = DioClose(h);
-                	}
+                    {
+                    	_ = DioClose(h);
+                    }
                     catch (Exception ex)
-                	{
+                    {
 #if IOBOARD_TRACE
-                		IoLogger.Error($"Close error (RSW={rotarySwitchNo})", ex);
+                        IoLogger.Error($"Close error (RSW={rotarySwitchNo})", ex);
 #endif
-                	}
+                    }
                 }
                 _handleByRsw.Remove(rotarySwitchNo);
                 _outShadowByRsw.Remove(rotarySwitchNo);
@@ -261,14 +263,21 @@ namespace IoBoardWrapper
             DiagTrace.Write("WRITE", rotarySwitchNo, port, value, "Wrapper");
 #endif
 
-        	lock (_sync)
+            lock (_sync)
             {
                 if (!_handleByRsw.TryGetValue(rotarySwitchNo, out var h) || h == IntPtr.Zero) return;
 
-                if (!_outShadowByRsw.TryGetValue(rotarySwitchNo, out var shadow) || shadow == null || shadow.Length != OUTPUT_BYTES_LEN)
+                if (!_outShadowByRsw.TryGetValue(rotarySwitchNo, out var shadow) || shadow == null)
                 {
-                    shadow = new byte[OUTPUT_BYTES_LEN];
+                    shadow = new byte[INITIAL_OUTPUT_BYTES_LEN];
                     _outShadowByRsw[rotarySwitchNo] = shadow;
+                }
+
+                // ★ 重要: 必要サイズまで拡張（例: OUT32 → 5バイト, OUT64 → 9バイト）
+                if (byteIndex >= shadow.Length)
+                {
+                    Array.Resize(ref shadow, byteIndex + 1);
+                    _outShadowByRsw[rotarySwitchNo] = shadow; // 参照更新
                 }
 
                 byte mask = (byte)(1 << bitIndex);
@@ -278,12 +287,12 @@ namespace IoBoardWrapper
                 try
                 {
                     var rc = DioOutputByte(h, byteIndex, shadow[byteIndex]);
+#if IOBOARD_TRACE
                     if (rc != ERROR_SUCCESS)
                     {
-#if IOBOARD_TRACE
                         IoLogger.Warn($"DioOutputByte rc={rc} (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})");
+                    }
 #endif
-					}
                 }
                 catch (Exception ex)
                 {
@@ -307,13 +316,14 @@ namespace IoBoardWrapper
                 try
                 {
                     var rc = DioInputByte(h, byteIndex, out byte val);
+#if IOBOARD_TRACE
                     if (rc != ERROR_SUCCESS)
                     {
-#if IOBOARD_TRACE
                         IoLogger.Warn($"DioInputByte rc={rc} (RSW={rotarySwitchNo}, port={port}, byteIndex={byteIndex})");
-#endif
-                        return false;
                     }
+#endif
+                    if (rc != ERROR_SUCCESS) return false;
+
                     bool on = ((val >> bitIndex) & 0x01) != 0;
 
 #if IOBOARD_TRACE
@@ -321,7 +331,7 @@ namespace IoBoardWrapper
                     DiagTrace.Write("INPUT", rotarySwitchNo, port, on, "Wrapper");
 #endif
 
-                	return on;
+                    return on;
                 }
                 catch (Exception ex)
                 {
